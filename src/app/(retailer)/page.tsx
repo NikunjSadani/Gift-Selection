@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [campaignStatus, setCampaignStatus] = useState<'active' | 'before' | 'closed' | null>(null);
   const [checking, setChecking] = useState(true);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -72,6 +73,7 @@ export default function LoginPage() {
       }
       setStep('otp');
       setResendTimer(data.resendAfter || 45);
+      if (data.devOtp) setDevOtp(data.devOtp);
       toast.success('OTP sent!');
     } catch {
       toast.error('Network error. Please try again.');
@@ -190,6 +192,13 @@ export default function LoginPage() {
               Enter the OTP sent to <span className="font-semibold">+91 {mobile}</span>
               <button onClick={() => setStep('mobile')} className="ml-2 text-[#E3000F] text-sm underline">Change</button>
             </p>
+
+            {devOtp && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3 mb-4 text-center">
+                <p className="text-xs text-yellow-700 font-medium uppercase tracking-wide mb-1">Dev Mode — OTP</p>
+                <p className="text-2xl font-mono font-bold text-yellow-800 tracking-widest">{devOtp}</p>
+              </div>
+            )}
 
             <div className="flex gap-2 justify-center mb-4">
               {otp.map((digit, i) => (

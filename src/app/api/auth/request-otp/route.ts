@@ -37,7 +37,11 @@ export async function POST(request: NextRequest) {
 
     await sendOtp(mobile, otp);
 
-    return NextResponse.json({ success: true, resendAfter: setting.otpResendSeconds });
+    return NextResponse.json({
+      success: true,
+      resendAfter: setting.otpResendSeconds,
+      ...(process.env.NODE_ENV !== 'production' && { devOtp: otp }),
+    });
   } catch (err) {
     console.error('[request-otp]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
