@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Admin {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Slab {
+  id           String            @id @default(cuid())
+  name         String            @unique
+  internalCode String            @unique
+  displayOrder Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  retailers    Retailer[]
+  giftMappings GiftSlabMapping[]
+}
+
+model Retailer {
+  id           String      @id @default(cuid())
+  retailerId   String      @unique
+  name         String
+  ownerName    String?
+  mobile       String      @unique
+  slabId       String
+  slab         Slab        @relation(fields: [slabId], references: [id])
+  ndaCode      String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  pincode      String?
+  gstNumber    String?
+  status       String      @default("active")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  submission   Submission?
+  draft        Draft?
+}
+
+model Gift {
+  id           String            @id @default(cuid())
+  name         String
+  description  String
+  sku          String?
+  imageUrl     String?
+  mrp          Float?
+  showMrp      Boolean           @default(false)
+  status       String            @default("active")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  slabMappings GiftSlabMapping[]
+  submissions  Submission[]
+}
+
+model GiftSlabMapping {
+  id              String @id @default(cuid())
+  giftId          String
+  slabId          String
+  displaySequence Int    @default(0)
+  gift            Gift   @relation(fields: [giftId], references: [id], onDelete: Cascade)
+  slab            Slab   @relation(fields: [slabId], references: [id], onDelete: Cascade)
+
+  @@unique([giftId, slabId])
+}
+
+model Submission {
+  id              String    @id @default(cuid())
+  referenceId     String    @unique
+  retailerId      String    @unique
+  retailer        Retailer  @relation(fields: [retailerId], references: [id])
+  giftId          String
+  gift            Gift      @relation(fields: [giftId], references: [id])
+  storeName       String
+  ownerName       String
+  addressLine1    String
+  addressLine2    String?
+  city            String
+  state           String
+  pincode         String
+  gstNumber       String?
+  landmark        String?
+  alternateMobile String?
+  detailsEdited   Boolean   @default(false)
+  documentUrl     String?
+  documentType    String?
+  whatsappSent    Boolean   @default(false)
+  whatsappSentAt  DateTime?
+  submittedAt     DateTime  @default(now())
+}
+
+model Draft {
+  id         String   @id @default(cuid())
+  retailerId String   @unique
+  retailer   Retailer @relation(fields: [retailerId], references: [id])
+  step       String   @default("gift")
+  giftId     String?
+  formData   String?
+  updatedAt  DateTime @updatedAt
+}
+
+model OtpRecord {
+  id        String   @id @default(cuid())
+  mobile    String
+  otp       String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model CampaignSetting {
+  id               String    @id @default(cuid())
+  campaignName     String    @default("Kwality Walls Gift Program")
+  startDate        DateTime?
+  endDate          DateTime?
+  forceStatus      String?
+  supportWhatsapp  String    @default("")
+  otpExpiryMinutes Int       @default(5)
+  otpResendSeconds Int       @default(45)
+  maxDocSizeMb     Int       @default(5)
+  whatsappEnabled  Boolean   @default(true)
+  updatedAt        DateTime  @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  adminId     String?
+  admin       Admin?   @relation(fields: [adminId], references: [id])
+  adminEmail  String?
+  action      String
+  entityType  String?
+  entityId    String?
+  beforeValue String?
+  afterValue  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
