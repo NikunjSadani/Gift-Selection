@@ -145,10 +145,14 @@ export default function GiftPage() {
           }
           Object.entries(prefill).forEach(([k, v]) => setValue(k as keyof FormData, v || ''));
 
-          // Restore carousel position from draft but do NOT pre-select the gift
+          // Restore gift selection and carousel position from draft (no confetti on resume)
           if (retailer.draft?.giftId) {
             const idx = giftList.findIndex((g) => g.id === retailer.draft.giftId);
-            if (idx >= 0) setTimeout(() => emblaApi?.scrollTo(idx), 100);
+            if (idx >= 0) {
+              setSelectedGift(giftList[idx]);
+              setSelectedIndex(idx);
+              setTimeout(() => emblaApi?.scrollTo(idx), 100);
+            }
           }
         }
       } catch {
@@ -186,10 +190,10 @@ export default function GiftPage() {
   };
 
   const handleGiftTap = async (gift: Gift, index: number) => {
-    if (selectedGift?.id === gift.id) return;
+    const isNewSelection = selectedGift?.id !== gift.id;
     setSelectedGift(gift);
     emblaApi?.scrollTo(index);
-    fireConfetti();
+    if (isNewSelection) fireConfetti();
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 600);
