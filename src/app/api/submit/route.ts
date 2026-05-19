@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       documentType,
     } = body;
 
-    if (!giftId || !storeName || !ownerName || !addressLine1 || !city || !state || !pincode) {
+    if (!giftId || !storeName || !addressLine1 || !city || !state || !pincode) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
     }
 

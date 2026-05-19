@@ -145,13 +145,10 @@ export default function GiftPage() {
           }
           Object.entries(prefill).forEach(([k, v]) => setValue(k as keyof FormData, v || ''));
 
+          // Restore carousel position from draft but do NOT pre-select the gift
           if (retailer.draft?.giftId) {
             const idx = giftList.findIndex((g) => g.id === retailer.draft.giftId);
-            if (idx >= 0) {
-              setSelectedGift(giftList[idx]);
-              setSelectedIndex(idx);
-              setTimeout(() => emblaApi?.scrollTo(idx), 100);
-            }
+            if (idx >= 0) setTimeout(() => emblaApi?.scrollTo(idx), 100);
           }
         }
       } catch {
