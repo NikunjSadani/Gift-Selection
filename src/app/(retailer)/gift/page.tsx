@@ -299,7 +299,7 @@ export default function GiftPage() {
               <div key={gift.id} className="flex-none w-[85vw] max-w-sm">
                 <div
                   onClick={() => handleGiftTap(gift, i)}
-                  className={`rounded-3xl overflow-hidden shadow-xl h-[58vh] flex flex-col cursor-pointer transition-all duration-300 relative ${
+                  className={`rounded-3xl overflow-hidden shadow-xl h-[44vh] flex flex-col cursor-pointer transition-all duration-300 relative ${
                     gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
                   } ${i === selectedIndex ? 'scale-100' : 'scale-95 opacity-75'} ${
                     isSelected ? 'ring-4 ring-white ring-offset-2' : ''
