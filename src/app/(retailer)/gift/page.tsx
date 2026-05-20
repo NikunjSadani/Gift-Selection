@@ -299,29 +299,45 @@ export default function GiftPage() {
               <div key={gift.id} className="flex-none w-[85vw] max-w-sm">
                 <div
                   onClick={() => handleGiftTap(gift, i)}
-                  className={`rounded-3xl overflow-hidden shadow-xl h-[55vh] flex flex-col bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]} cursor-pointer transition-all duration-300 ${
-                    i === selectedIndex ? 'scale-100' : 'scale-95 opacity-75'
-                  } ${isSelected ? 'ring-4 ring-white ring-offset-2 ring-offset-transparent' : ''}`}
+                  className={`rounded-3xl overflow-hidden shadow-xl h-[58vh] flex flex-col cursor-pointer transition-all duration-300 relative ${
+                    gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
+                  } ${i === selectedIndex ? 'scale-100' : 'scale-95 opacity-75'} ${
+                    isSelected ? 'ring-4 ring-white ring-offset-2' : ''
+                  }`}
                 >
-                  <div className="flex-1 flex items-center justify-center p-6 relative">
-                    {isSelected && (
-                      <div className="absolute top-3 right-3 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md z-10">
-                        <span className="text-green-500 text-lg font-bold">✓</span>
-                      </div>
-                    )}
-                    {gift.imageUrl ? (
-                      <div className="w-full h-44 relative rounded-2xl overflow-hidden">
-                        <Image src={gift.imageUrl} alt={gift.name} fill className="object-contain" />
-                      </div>
-                    ) : (
-                      <div className="w-44 h-44 bg-white/20 rounded-2xl flex items-center justify-center">
-                        <span className="text-7xl">🎁</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-white/95 p-5 rounded-b-3xl">
-                    <h3 className="font-bold text-gray-800 text-xl">{gift.name}</h3>
-                    <p className="text-gray-600 text-sm mt-1 line-clamp-2">{gift.description}</p>
+                  {/* Selected tick */}
+                  {isSelected && (
+                    <div className="absolute top-3 right-3 z-20 bg-white rounded-full w-9 h-9 flex items-center justify-center shadow-lg">
+                      <span className="text-green-500 text-xl font-bold">✓</span>
+                    </div>
+                  )}
+
+                  {/* Full-bleed image or emoji placeholder */}
+                  {gift.imageUrl ? (
+                    <div className="flex-1 relative">
+                      <Image
+                        src={gift.imageUrl}
+                        alt={gift.name}
+                        fill
+                        className="object-cover"
+                      />
+                      {/* Gradient overlay for text readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center">
+                      <span className="text-8xl drop-shadow-lg">🎁</span>
+                    </div>
+                  )}
+
+                  {/* Name / description bar */}
+                  <div className={`p-4 ${gift.imageUrl ? 'absolute bottom-0 left-0 right-0' : 'bg-white/95'}`}>
+                    <h3 className={`font-bold text-xl leading-tight ${gift.imageUrl ? 'text-white' : 'text-gray-800'}`}>
+                      {gift.name}
+                    </h3>
+                    <p className={`text-sm mt-1 line-clamp-2 ${gift.imageUrl ? 'text-white/80' : 'text-gray-600'}`}>
+                      {gift.description}
+                    </p>
                     {gift.showMrp && gift.mrp && (
                       <span className="inline-block mt-2 bg-[#FFD200] text-gray-900 text-xs font-bold px-3 py-1 rounded-full">
                         ₹{gift.mrp.toLocaleString('en-IN')}
