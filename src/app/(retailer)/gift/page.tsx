@@ -6,6 +6,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
+import Image from 'next/image';
 
 interface Gift {
   id: string;
@@ -302,15 +303,21 @@ export default function GiftPage() {
                     i === selectedIndex ? 'scale-100' : 'scale-95 opacity-75'
                   } ${isSelected ? 'ring-4 ring-white ring-offset-2 ring-offset-transparent' : ''}`}
                 >
-                  <div className="flex-1 flex items-center justify-center p-8 relative">
+                  <div className="flex-1 flex items-center justify-center p-6 relative">
                     {isSelected && (
-                      <div className="absolute top-3 right-3 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md">
+                      <div className="absolute top-3 right-3 bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md z-10">
                         <span className="text-green-500 text-lg font-bold">✓</span>
                       </div>
                     )}
-                    <div className="w-44 h-44 bg-white/20 rounded-2xl flex items-center justify-center">
-                      <span className="text-7xl">🎁</span>
-                    </div>
+                    {gift.imageUrl ? (
+                      <div className="w-full h-44 relative rounded-2xl overflow-hidden">
+                        <Image src={gift.imageUrl} alt={gift.name} fill className="object-contain" />
+                      </div>
+                    ) : (
+                      <div className="w-44 h-44 bg-white/20 rounded-2xl flex items-center justify-center">
+                        <span className="text-7xl">🎁</span>
+                      </div>
+                    )}
                   </div>
                   <div className="bg-white/95 p-5 rounded-b-3xl">
                     <h3 className="font-bold text-gray-800 text-xl">{gift.name}</h3>
