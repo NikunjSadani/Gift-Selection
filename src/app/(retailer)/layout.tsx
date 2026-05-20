@@ -3,19 +3,32 @@ import Image from 'next/image'
 export default function RetailerLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <header className="bg-[#E3000F] shadow-md sticky top-0 z-50">
-        <div className="max-w-md mx-auto px-4 py-2 flex items-center justify-between">
-          <Image
-            src="/kwality-walls-logo.png"
-            alt="Kwality Wall's"
-            width={130}
-            height={52}
-            priority
-            style={{ filter: 'brightness(0) invert(1)' }}
-          />
-          <span className="text-white font-semibold text-sm text-right leading-tight">
-            Kwality Klub
-          </span>
+      <header className="bg-[#E3000F] shadow-lg sticky top-0 z-50">
+        <div className="max-w-md mx-auto px-4 py-2 flex items-center justify-between gap-3">
+          {/* Logo on white pill */}
+          <div className="bg-white rounded-xl px-3 py-1.5 shadow-sm flex-shrink-0">
+            <Image
+              src="/kwality-walls-logo.png"
+              alt="Kwality Wall's"
+              width={110}
+              height={44}
+              priority
+            />
+          </div>
+
+          {/* Right side branding */}
+          <div className="text-right">
+            <p className="text-white font-black text-base tracking-wide leading-tight">
+              Kwality Klub
+            </p>
+            <div className="flex items-center justify-end gap-1 mt-0.5">
+              <span className="w-4 h-px bg-[#FFD200]" />
+              <p className="text-[#FFD200] text-[10px] font-semibold tracking-widest uppercase">
+                Reward Program
+              </p>
+              <span className="w-4 h-px bg-[#FFD200]" />
+            </div>
+          </div>
         </div>
       </header>
       <main className="flex-1 max-w-md mx-auto w-full">
