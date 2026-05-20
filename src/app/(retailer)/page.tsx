@@ -242,7 +242,7 @@ export default function LoginPage() {
       </div>
 
       <p className="text-center text-xs text-gray-400 mt-6">
-        Kwality Walls Gifting Program 2025
+        Kwality Klub Reward Program
       </p>
     </div>
   );

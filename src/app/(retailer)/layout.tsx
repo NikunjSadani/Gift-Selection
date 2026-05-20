@@ -13,8 +13,8 @@ export default function RetailerLayout({ children }: { children: React.ReactNode
             priority
             style={{ filter: 'brightness(0) invert(1)' }}
           />
-          <span className="text-white/80 text-xs text-right leading-tight">
-            Gift Selection<br />Program 2025
+          <span className="text-white font-semibold text-sm text-right leading-tight">
+            Kwality Klub
           </span>
         </div>
       </header>
