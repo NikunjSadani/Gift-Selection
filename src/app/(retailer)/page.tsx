@@ -244,6 +244,12 @@ export default function LoginPage() {
       <p className="text-center text-xs text-gray-400 mt-6">
         Kwality Klub Reward Program
       </p>
+      <p className="text-center text-xs text-gray-400 mt-2 px-6">
+        For any login issues, sales team to email at{' '}
+        <a href="mailto:Contact@gifsy.in" className="text-[#E3000F] underline">
+          Contact@gifsy.in
+        </a>
+      </p>
     </div>
   );
 }
