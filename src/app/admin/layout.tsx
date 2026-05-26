@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -10,14 +10,48 @@ const NAV_ITEMS = [
   { href: '/admin/retailers', label: 'Retailers', icon: '🏪' },
   { href: '/admin/gifts', label: 'Gifts', icon: '🎁' },
   { href: '/admin/slabs', label: 'Slabs', icon: '📋' },
+  { href: '/admin/in-progress', label: 'In Progress', icon: '⏳' },
   { href: '/admin/submissions', label: 'Submissions', icon: '📝' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
 ];
+
+function SidebarBrand({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  return (
+    <div className="p-4 border-b border-gray-200">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 bg-[#E3000F] rounded-full flex items-center justify-center">
+          <span className="text-white font-black text-xs">KW</span>
+        </div>
+        <div>
+          <p className="font-bold text-gray-800 text-sm">Kwality Walls</p>
+          <p className="text-gray-400 text-xs">Admin Panel</p>
+        </div>
+      </div>
+      {isSuperAdmin && (
+        <div className="mt-2 flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-1.5">
+          <span className="text-purple-600 text-xs">⚡</span>
+          <span className="text-purple-700 text-xs font-bold">Gifsy Superadmin</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    if (pathname === '/admin/login') return;
+    fetch('/api/admin/me', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.admin?.role === 'superadmin') setIsSuperAdmin(true);
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   if (pathname === '/admin/login') {
     return <>{children}</>;
@@ -33,17 +67,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex md:flex-col w-64 bg-white border-r border-gray-200 fixed h-full">
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#E3000F] rounded-full flex items-center justify-center">
-              <span className="text-white font-black text-xs">KW</span>
-            </div>
-            <div>
-              <p className="font-bold text-gray-800 text-sm">Kwality Walls</p>
-              <p className="text-gray-400 text-xs">Admin Panel</p>
-            </div>
-          </div>
-        </div>
+        <SidebarBrand isSuperAdmin={isSuperAdmin} />
 
         <nav className="flex-1 p-4 space-y-1">
           {NAV_ITEMS.map((item) => (
@@ -80,6 +104,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <aside className="relative w-64 bg-white h-full flex flex-col">
             <div className="p-4 border-b border-gray-200">
               <p className="font-bold text-gray-800">Kwality Walls Admin</p>
+              {isSuperAdmin && (
+                <div className="mt-1 flex items-center gap-1 text-purple-600 text-xs font-bold">
+                  <span>⚡</span>
+                  <span>Gifsy Superadmin</span>
+                </div>
+              )}
             </div>
             <nav className="flex-1 p-4 space-y-1">
               {NAV_ITEMS.map((item) => (
@@ -117,6 +147,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </svg>
           </button>
           <p className="font-bold text-gray-800">Admin Panel</p>
+          {isSuperAdmin && (
+            <span className="ml-auto text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+              ⚡ Gifsy
+            </span>
+          )}
         </header>
 
         <main className="flex-1 p-4 md:p-6">

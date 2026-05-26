@@ -25,18 +25,6 @@ env:
     availability:
       - RUNTIME
 
-  - variable: DATABASE_URL
-    secret: DATABASE_URL
-    availability:
-      - BUILD
-      - RUNTIME
-
-  - variable: DIRECT_URL
-    secret: DIRECT_URL
-    availability:
-      - BUILD
-      - RUNTIME
-
   - variable: MSG91_API_KEY
     secret: MSG91_API_KEY
     availability:
