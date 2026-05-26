@@ -10,6 +10,9 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DATABASE_URL"] ?? "",
+    // directUrl is used by Prisma Migrate to bypass connection poolers (e.g. pgBouncer)
+    // Set DIRECT_URL to the direct connection string in .env.local
+    ...(process.env["DIRECT_URL"] ? { directUrl: process.env["DIRECT_URL"] } : {}),
   },
 });

@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model Admin {
@@ -12,6 +12,7 @@ model Admin {
   email        String     @unique
   passwordHash String
   name         String
+  role         String     @default("admin")   // "admin" | "superadmin"
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
@@ -42,6 +43,9 @@ model Retailer {
   city         String?
   state        String?
   pincode      String?
+  landmark     String?
+  cso          String?
+  csoPhone     String?
   gstNumber    String?
   status       String      @default("active")
   createdAt    DateTime    @default(now())
@@ -98,6 +102,7 @@ model Submission {
   documentType    String?
   whatsappSent    Boolean   @default(false)
   whatsappSentAt  DateTime?
+  giftConfirmedAt DateTime?
   submittedAt     DateTime  @default(now())
 }
 
@@ -105,10 +110,12 @@ model Draft {
   id         String   @id @default(cuid())
   retailerId String   @unique
   retailer   Retailer @relation(fields: [retailerId], references: [id])
-  step       String   @default("gift")
-  giftId     String?
-  formData   String?
-  updatedAt  DateTime @updatedAt
+  step            String    @default("gift")
+  giftId          String?
+  giftConfirmed   Boolean   @default(false)
+  giftSelectedAt  DateTime?
+  formData        String?
+  updatedAt       DateTime  @updatedAt
 }
 
 model OtpRecord {
