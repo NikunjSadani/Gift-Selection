@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import useEmblaCarousel from 'embla-carousel-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
@@ -17,7 +16,7 @@ interface Gift {
   showMrp: boolean;
 }
 
-interface FormData {
+interface FormValues {
   storeName: string;
   addressLine1: string;
   addressLine2: string;
@@ -25,7 +24,6 @@ interface FormData {
   state: string;
   pincode: string;
   landmark: string;
-  alternateMobile: string;
 }
 
 const GRADIENT_COLORS = [
@@ -48,62 +46,100 @@ const INDIAN_STATES = [
   'Lakshadweep',
 ];
 
+function formatCountdown(isoStr: string): { label: string; urgent: boolean; expired: boolean } {
+  const ms = 86400000 - (Date.now() - new Date(isoStr).getTime());
+  if (ms <= 0) return { label: 'Change window closed', urgent: false, expired: true };
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const urgent = ms < 3600000;
+  if (h === 0) return { label: `${m}m left to change gift`, urgent, expired: false };
+  return { label: `${h}h ${m}m left to change gift`, urgent, expired: false };
+}
+
 export default function GiftPage() {
   const router = useRouter();
   const formRef = useRef<HTMLDivElement>(null);
+  const hasFetched = useRef(false);
 
   const [gifts, setGifts] = useState<Gift[]>([]);
+  const [slab, setSlab] = useState<{ name: string; internalCode: string } | null>(null);
+  const [retailerMobile, setRetailerMobile] = useState('');
   const [loading, setLoading] = useState(true);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Gift selection
   const [selectedGift, setSelectedGift] = useState<Gift | null>(null);
-  const [originalData, setOriginalData] = useState<Partial<FormData>>({});
+  const [giftConfirmed, setGiftConfirmed] = useState(false);
+  // giftConfirmedAt: the moment "Confirm My Gift Selection" was clicked — this is the ONE clock
+  const [giftConfirmedAt, setGiftConfirmedAt] = useState<string | null>(null);
+  const [confirmingGift, setConfirmingGift] = useState(false);
+
+  // Modals / sheets
+  const [modalGift, setModalGift] = useState<Gift | null>(null);       // pre-confirm detail view
+  const [changeSheetOpen, setChangeSheetOpen] = useState(false);       // post-confirm change sheet
+  const [changeModalGift, setChangeModalGift] = useState<Gift | null>(null); // detail in change sheet
+  const [changingGift, setChangingGift] = useState(false);
+
+  // Form
+  const [originalData, setOriginalData] = useState<Partial<FormValues>>({});
   const [detailsEdited, setDetailsEdited] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [documentType, setDocumentType] = useState('');
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, align: 'center' });
-
-  const { register, watch, setValue, handleSubmit, formState: { errors } } = useForm<FormData>();
-  const watchedValues = watch();
-
-  const onCarouselSelect = useCallback(() => {
-    if (!emblaApi) return;
-    setSelectedIndex(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
-
+  // Minute ticker to keep countdown live
+  const [, setTick] = useState(0);
   useEffect(() => {
-    if (!emblaApi) return;
-    emblaApi.on('select', onCarouselSelect);
-    onCarouselSelect();
-  }, [emblaApi, onCarouselSelect]);
+    if (!giftConfirmedAt) return;
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, [giftConfirmedAt]);
 
-  // Detect edits vs original
+  const { register, watch, getValues, setValue, handleSubmit, formState: { errors } } = useForm<FormValues>();
+
+  // ── Derived lock state ────────────────────────────────────────────────────
+  // The clock starts when the retailer clicks "Confirm My Gift Selection".
+  // Within 24h: confirmed but can still change.
+  // After 24h: fully locked.
+  const is24hExpired = giftConfirmedAt
+    ? Date.now() - new Date(giftConfirmedAt).getTime() >= 86400000
+    : false;
+  const isFullyLocked = giftConfirmed && is24hExpired;
+  const canChangeAfterConfirm = giftConfirmed && !is24hExpired;
+  const countdown = giftConfirmedAt ? formatCountdown(giftConfirmedAt) : null;
+
+  // ── Detect address edits ──────────────────────────────────────────────────
+  const watchedValues = watch();
   useEffect(() => {
     if (Object.keys(originalData).length === 0) return;
-    const addressFields = ['storeName', 'addressLine1', 'addressLine2', 'city', 'state', 'pincode'] as const;
-    const edited = addressFields.some((f) => (watchedValues[f] || '') !== (originalData[f] || ''));
+    const fields = ['storeName', 'addressLine1', 'addressLine2', 'city', 'state', 'pincode'] as const;
+    const edited = fields.some((f) => (watchedValues[f] || '') !== (originalData[f] || ''));
     setDetailsEdited(edited);
   }, [watchedValues, originalData]);
 
-  // Auto-save draft
+  // ── Auto-save draft ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedGift) return;
+    const giftId = selectedGift.id;
     const timer = setTimeout(async () => {
       try {
         await fetch('/api/draft', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ step: 'details', giftId: selectedGift.id, formData: JSON.stringify(watchedValues) }),
+          body: JSON.stringify({ step: 'details', giftId, formData: getValues() }),
         });
-      } catch {}
+      } catch { /* silent */ }
     }, 1000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedValues, selectedGift]);
 
+  // ── Initial data load ─────────────────────────────────────────────────────
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
     const load = async () => {
       try {
         const [giftsRes, meRes] = await Promise.all([
@@ -113,48 +149,49 @@ export default function GiftPage() {
 
         if (!giftsRes.ok) { router.replace('/'); return; }
 
-        const giftsData = await giftsRes.json();
-        const giftList: Gift[] = giftsData.gifts || [];
+        const giftList: Gift[] = (await giftsRes.json()).gifts || [];
         setGifts(giftList);
 
         if (meRes.ok) {
           const { retailer } = await meRes.json();
 
-          const prefill: Partial<FormData> = {
-            storeName: retailer.name || '',
-            addressLine1: retailer.addressLine1 || '',
-            addressLine2: retailer.addressLine2 || '',
-            city: retailer.city || '',
-            state: retailer.state || '',
-            pincode: retailer.pincode || '',
-            landmark: '',
-            alternateMobile: '',
-          };
+          if (retailer.slab) setSlab({ name: retailer.slab.name, internalCode: retailer.slab.internalCode });
+          if (retailer.mobile) setRetailerMobile(retailer.mobile);
 
-          const original = {
+          const prefill: Partial<FormValues> = {
             storeName: retailer.name || '',
             addressLine1: retailer.addressLine1 || '',
             addressLine2: retailer.addressLine2 || '',
             city: retailer.city || '',
             state: retailer.state || '',
             pincode: retailer.pincode || '',
+            landmark: retailer.landmark || '',
           };
-          setOriginalData(original);
+          setOriginalData({
+            storeName: retailer.name || '',
+            addressLine1: retailer.addressLine1 || '',
+            addressLine2: retailer.addressLine2 || '',
+            city: retailer.city || '',
+            state: retailer.state || '',
+            pincode: retailer.pincode || '',
+          });
 
           if (retailer.draft?.formData) {
-            try { Object.assign(prefill, JSON.parse(retailer.draft.formData)); } catch {}
+            try {
+              const raw = retailer.draft.formData;
+              const saved = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              if (saved && typeof saved === 'object') Object.assign(prefill, saved);
+            } catch { /* corrupt */ }
           }
-          Object.entries(prefill).forEach(([k, v]) => setValue(k as keyof FormData, v || ''));
+          Object.entries(prefill).forEach(([k, v]) => setValue(k as keyof FormValues, v || ''));
 
-          // Restore gift selection and carousel position from draft (no confetti on resume)
           if (retailer.draft?.giftId) {
-            const idx = giftList.findIndex((g) => g.id === retailer.draft.giftId);
-            if (idx >= 0) {
-              setSelectedGift(giftList[idx]);
-              setSelectedIndex(idx);
-              setTimeout(() => emblaApi?.scrollTo(idx), 100);
-            }
+            const found = giftList.find((g) => g.id === retailer.draft.giftId);
+            if (found) setSelectedGift(found);
           }
+          if (retailer.draft?.giftConfirmed) setGiftConfirmed(true);
+          // giftSelectedAt on the draft = the confirm-clock timestamp
+          if (retailer.draft?.giftSelectedAt) setGiftConfirmedAt(retailer.draft.giftSelectedAt);
         }
       } catch {
         toast.error('Failed to load. Please refresh.');
@@ -162,51 +199,96 @@ export default function GiftPage() {
         setLoading(false);
       }
     };
+
     load();
-  }, [router, setValue, emblaApi]);
+  }, [router, setValue]);
 
-  const fireConfetti = () => {
-    confetti({
-      particleCount: 120,
-      spread: 80,
-      origin: { y: 0.4 },
-      colors: ['#E3000F', '#FFD200', '#ffffff', '#ff6b6b', '#ffd93d'],
-    });
+  // ── Confetti ──────────────────────────────────────────────────────────────
+  const fireConfetti = useCallback(() => {
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.4 },
+      colors: ['#E3000F', '#FFD200', '#ffffff', '#ff6b6b', '#ffd93d'] });
     setTimeout(() => {
-      confetti({
-        particleCount: 60,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.5 },
-        colors: ['#E3000F', '#FFD200', '#ffffff'],
-      });
-      confetti({
-        particleCount: 60,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.5 },
-        colors: ['#E3000F', '#FFD200', '#ffffff'],
-      });
+      confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0, y: 0.5 },
+        colors: ['#E3000F', '#FFD200', '#ffffff'] });
+      confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.5 },
+        colors: ['#E3000F', '#FFD200', '#ffffff'] });
     }, 200);
-  };
+  }, []);
 
-  const handleGiftTap = async (gift: Gift, index: number) => {
-    const isNewSelection = selectedGift?.id !== gift.id;
+  // ── Pre-confirm: tap card → open detail modal → select ────────────────────
+  const handleSelectGift = async (gift: Gift) => {
+    if (giftConfirmed) return; // after confirm use the change sheet instead
+    const isNew = selectedGift?.id !== gift.id;
     setSelectedGift(gift);
-    emblaApi?.scrollTo(index);
-    if (isNewSelection) fireConfetti();
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 600);
+    setModalGift(null);
+    if (isNew) {
+      fireConfetti();
+      try {
+        await fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ step: 'gift', giftId: gift.id }),
+        });
+      } catch { /* auto-save will retry */ }
+    }
   };
 
+  // ── Confirm gift — this starts the 24h clock ──────────────────────────────
+  const handleConfirmGift = async () => {
+    if (!selectedGift || giftConfirmed) return;
+    setConfirmingGift(true);
+    try {
+      await fetch('/api/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ step: 'details', giftId: selectedGift.id, giftConfirmed: true }),
+      });
+      setGiftConfirmed(true);
+      setGiftConfirmedAt(new Date().toISOString()); // start the 24h clock locally
+      setTimeout(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    } catch {
+      toast.error('Could not confirm gift. Please try again.');
+    } finally {
+      setConfirmingGift(false);
+    }
+  };
+
+  // ── Post-confirm: change gift within 24h window ───────────────────────────
+  const handleChangeGift = async (gift: Gift) => {
+    if (gift.id === selectedGift?.id) { setChangeSheetOpen(false); setChangeModalGift(null); return; }
+    setChangingGift(true);
+    try {
+      await fetch('/api/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        // No giftConfirmed in body — API won't touch giftConfirmed or giftSelectedAt (clock stays)
+        body: JSON.stringify({ step: 'details', giftId: gift.id }),
+      });
+      setSelectedGift(gift);
+      setChangeSheetOpen(false);
+      setChangeModalGift(null);
+      toast.success(`Gift changed to ${gift.name}`);
+      fireConfetti();
+    } catch {
+      toast.error('Could not change gift. Please try again.');
+    } finally {
+      setChangingGift(false);
+    }
+  };
+
+  // ── Document upload ───────────────────────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { toast.error('File must be under 5MB'); return; }
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-    if (!allowed.includes(file.type)) { toast.error('Only JPG, PNG, or PDF allowed'); return; }
-
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'].includes(file.type)) {
+      toast.error('Only JPG, PNG, or PDF allowed'); return;
+    }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -223,10 +305,10 @@ export default function GiftPage() {
     }
   };
 
-  const onSubmit = async (formData: FormData) => {
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const onSubmit = async (formData: FormValues) => {
     if (!selectedGift) { toast.error('Please select a gift first'); return; }
     if (detailsEdited && !documentUrl) { toast.error('Please upload a document since you edited your address'); return; }
-
     setSubmitting(true);
     try {
       const res = await fetch('/api/submit', {
@@ -243,7 +325,6 @@ export default function GiftPage() {
           state: formData.state,
           pincode: formData.pincode,
           landmark: formData.landmark,
-          alternateMobile: formData.alternateMobile,
           detailsEdited,
           documentUrl,
           documentType,
@@ -251,10 +332,7 @@ export default function GiftPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === 'already_submitted') {
-          router.replace('/confirmation');
-          return;
-        }
+        if (data.error === 'already_submitted') { router.replace('/confirmation'); return; }
         throw new Error(data.error);
       }
       router.replace('/confirmation');
@@ -264,6 +342,7 @@ export default function GiftPage() {
     }
   };
 
+  // ── Loading / empty ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -271,7 +350,6 @@ export default function GiftPage() {
       </div>
     );
   }
-
   if (gifts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
@@ -282,66 +360,99 @@ export default function GiftPage() {
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="pb-12">
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} className="pb-12">
 
-      {/* ── Gift Carousel ── */}
-      <div className="pt-4 pb-2 text-center px-4">
-        <h2 className="text-xl font-bold text-gray-800">Select Your Gift</h2>
-        <p className="text-gray-500 text-sm mt-1">Tap a gift to select it</p>
-      </div>
+        {/* Slab banner */}
+        {slab && (
+          <div className="mx-4 mt-4 rounded-2xl bg-gradient-to-r from-[#E3000F] to-[#c0000d] shadow-md flex items-center justify-between px-4 py-2.5">
+            <p className="text-white/80 text-xs font-semibold uppercase tracking-widest">Your Reward Tier</p>
+            <p className="text-[#FFD200] font-black text-2xl leading-none drop-shadow-sm">{slab.name}</p>
+          </div>
+        )}
 
-      <div ref={emblaRef} className="overflow-hidden px-4">
-        <div className="flex gap-4">
+        {/* Section header */}
+        <div className="pt-5 pb-3 px-4">
+          <h2 className="text-xl font-bold text-gray-800">
+            {isFullyLocked ? '🔒 Gift Selection Locked' : giftConfirmed ? '✅ Gift Confirmed' : 'Choose Your Gift'}
+          </h2>
+          <p className="text-gray-500 text-sm mt-1">
+            {isFullyLocked
+              ? 'The 24-hour change window has closed.'
+              : canChangeAfterConfirm
+              ? 'You can still change your gift within the 24-hour window.'
+              : 'Tap any gift to view details and select it.'}
+          </p>
+        </div>
+
+        {/* 24h countdown — visible after confirming, until expired */}
+        {countdown && giftConfirmed && (
+          <div className={`mx-4 mb-3 rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-2 ${
+            countdown.expired
+              ? 'bg-gray-100 text-gray-500'
+              : countdown.urgent
+              ? 'bg-red-50 text-red-600 border border-red-200'
+              : 'bg-amber-50 text-amber-700 border border-amber-200'
+          }`}>
+            <span>{countdown.expired ? '🔒' : countdown.urgent ? '⚠️' : '⏱️'}</span>
+            <span>{countdown.label}</span>
+          </div>
+        )}
+
+        {/* Gift list */}
+        <div className="px-4 space-y-3">
           {gifts.map((gift, i) => {
             const isSelected = selectedGift?.id === gift.id;
+            const tappable = !giftConfirmed; // after confirm, use the Change Gift sheet
             return (
-              <div key={gift.id} className="flex-none w-[85vw] max-w-sm">
-                <div
-                  onClick={() => handleGiftTap(gift, i)}
-                  className={`rounded-3xl overflow-hidden shadow-xl h-[44vh] flex flex-col cursor-pointer transition-all duration-300 relative ${
-                    gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
-                  } ${i === selectedIndex ? 'scale-100' : 'scale-95 opacity-75'} ${
-                    isSelected ? 'ring-4 ring-white ring-offset-2' : ''
-                  }`}
-                >
-                  {/* Selected tick */}
-                  {isSelected && (
-                    <div className="absolute top-3 right-3 z-20 bg-white rounded-full w-9 h-9 flex items-center justify-center shadow-lg">
-                      <span className="text-green-500 text-xl font-bold">✓</span>
-                    </div>
-                  )}
-
-                  {/* Full-bleed image or emoji placeholder */}
+              <div
+                key={gift.id}
+                onClick={() => { if (tappable) setModalGift(gift); }}
+                className={`flex gap-3 bg-white rounded-2xl shadow-sm overflow-hidden transition-all border ${
+                  isSelected
+                    ? 'border-green-400 ring-2 ring-green-400 shadow-md'
+                    : 'border-transparent'
+                } ${tappable ? 'cursor-pointer active:scale-[0.98] hover:shadow-md' : ''}`}
+              >
+                {/* Thumbnail */}
+                <div className={`w-28 h-24 flex-none relative ${
+                  gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
+                }`}>
                   {gift.imageUrl ? (
-                    <div className="flex-1 relative">
-                      <Image
-                        src={gift.imageUrl}
-                        alt={gift.name}
-                        fill
-                        className="object-cover"
-                      />
-                      {/* Gradient overlay for text readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    </div>
+                    <Image src={gift.imageUrl} alt={gift.name} fill sizes="112px" className="object-cover" />
                   ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                      <span className="text-8xl drop-shadow-lg">🎁</span>
+                    <div className="flex items-center justify-center h-full">
+                      <span className="text-4xl">🎁</span>
                     </div>
                   )}
+                  {isSelected && (
+                    <div className="absolute top-1.5 left-1.5 bg-green-500 rounded-full w-6 h-6 flex items-center justify-center shadow">
+                      <span className="text-white text-xs font-bold">✓</span>
+                    </div>
+                  )}
+                </div>
 
-                  {/* Name / description bar */}
-                  <div className={`p-4 ${gift.imageUrl ? 'absolute bottom-0 left-0 right-0' : 'bg-white/95'}`}>
-                    <h3 className={`font-bold text-xl leading-tight ${gift.imageUrl ? 'text-white' : 'text-gray-800'}`}>
-                      {gift.name}
-                    </h3>
-                    <p className={`text-sm mt-1 line-clamp-2 ${gift.imageUrl ? 'text-white/80' : 'text-gray-600'}`}>
-                      {gift.description}
-                    </p>
+                {/* Info */}
+                <div className="flex-1 py-3 pr-3 flex flex-col justify-center min-w-0">
+                  <h3 className={`font-bold text-sm leading-tight ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>
+                    {gift.name}
+                  </h3>
+                  <p className="text-gray-500 text-xs mt-0.5 line-clamp-2 leading-relaxed">{gift.description}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
                     {gift.showMrp && gift.mrp && (
-                      <span className="inline-block mt-2 bg-[#FFD200] text-gray-900 text-xs font-bold px-3 py-1 rounded-full">
+                      <span className="text-xs font-bold bg-[#FFD200] text-gray-900 px-2 py-0.5 rounded-full">
                         ₹{gift.mrp.toLocaleString('en-IN')}
                       </span>
+                    )}
+                    {tappable && (
+                      <span className="text-xs text-[#E3000F] font-medium">
+                        {isSelected ? 'Tap to view details' : 'Tap to view →'}
+                      </span>
+                    )}
+                    {isSelected && giftConfirmed && (
+                      <span className="text-xs text-green-600 font-medium">✓ Your gift</span>
                     )}
                   </div>
                 </div>
@@ -349,196 +460,317 @@ export default function GiftPage() {
             );
           })}
         </div>
-      </div>
 
-      {/* Dot indicators */}
-      <div className="flex justify-center gap-2 mt-4">
-        {gifts.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => emblaApi?.scrollTo(i)}
-            className={`h-2 rounded-full transition-all ${i === selectedIndex ? 'bg-[#E3000F] w-6' : 'bg-gray-300 w-2'}`}
-          />
-        ))}
-      </div>
-
-      {selectedGift && (
-        <p className="text-center text-sm font-medium text-green-600 mt-3">
-          🎉 {selectedGift.name} selected!
-        </p>
-      )}
-
-      {/* ── Address Form ── */}
-      <div ref={formRef} className="mt-8 px-4">
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-800">Verify Your Details</h2>
-          <p className="text-gray-500 text-sm mt-1">Review and update your store information</p>
+        {/* Confirm / status section */}
+        <div className="mt-5 px-4 space-y-3">
+          {isFullyLocked && selectedGift ? (
+            // Fully locked after 24h
+            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl py-3.5 px-4">
+              <span className="text-2xl">🔒</span>
+              <div>
+                <p className="text-gray-700 font-bold text-sm">{selectedGift.name}</p>
+                <p className="text-gray-500 text-xs mt-0.5">Locked — 24-hour window has closed</p>
+              </div>
+            </div>
+          ) : canChangeAfterConfirm && selectedGift ? (
+            // Confirmed and within 24h — show confirmed badge + change button
+            <>
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl py-3.5 px-4">
+                <span className="text-2xl">✅</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-green-700 font-bold text-sm">{selectedGift.name}</p>
+                  <p className="text-green-600 text-xs mt-0.5">Gift confirmed</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangeSheetOpen(true)}
+                className="w-full border-2 border-[#E3000F] text-[#E3000F] font-bold py-3 rounded-2xl text-sm active:scale-95 transition-transform"
+              >
+                🔄 Change Gift Selection
+              </button>
+            </>
+          ) : !giftConfirmed && selectedGift ? (
+            // Not yet confirmed — show selected state + confirm button
+            <>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <span className="text-base">🎁</span>
+                <p className="text-sm text-blue-800 font-medium">{selectedGift.name} selected</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleConfirmGift}
+                disabled={confirmingGift}
+                className="w-full bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold py-3.5 rounded-2xl text-base transition-all shadow-md disabled:opacity-60"
+              >
+                {confirmingGift ? 'Confirming…' : '✓ Confirm My Gift Selection'}
+              </button>
+            </>
+          ) : !giftConfirmed ? (
+            <p className="text-center text-gray-400 text-sm py-2">👆 Tap a gift above to get started</p>
+          ) : null}
         </div>
 
+        {/* Address form */}
+        <div ref={formRef} className="mt-8 px-4">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Verify Your Details</h2>
+            <p className="text-gray-500 text-sm mt-1">Review and update your store information</p>
+          </div>
+
+          {detailsEdited && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4 text-sm text-amber-800">
+              ✏️ You&apos;ve edited your address — a document upload will be required below.
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+              <input value={retailerMobile} readOnly
+                className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 bg-gray-50 text-gray-500 cursor-not-allowed" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Recipient&apos;s Name *</label>
+              <input {...register('storeName', { required: "Recipient's name is required" })}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                placeholder="Recipient's name" />
+              {errors.storeName && <p className="text-red-500 text-xs mt-1">{errors.storeName.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
+              <input {...register('addressLine1', { required: 'Address is required' })}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                placeholder="Shop/Building number, Street" />
+              {errors.addressLine1 && <p className="text-red-500 text-xs mt-1">{errors.addressLine1.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
+              <input {...register('addressLine2')}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                placeholder="Area, Colony (optional)" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Landmark</label>
+              <input {...register('landmark')}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                placeholder="Nearby landmark (optional)" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                <input {...register('city', { required: 'City is required' })}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                  placeholder="City" />
+                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
+                <input {...register('pincode', { required: 'Required', pattern: { value: /^\d{6}$/, message: '6 digits' } })}
+                  inputMode="numeric" maxLength={6}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                  placeholder="Pincode" />
+                {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode.message}</p>}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+              <select {...register('state', { required: 'State is required' })}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] bg-white transition-colors">
+                <option value="">Select State</option>
+                {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state.message}</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Document upload */}
         {detailsEdited && (
-          <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4 text-sm text-amber-800">
-            ✏️ You've edited your address — a document upload will be required below.
+          <div className="mt-8 px-4">
+            <div className="mb-3">
+              <h2 className="text-xl font-bold text-gray-800">Upload Document</h2>
+              <p className="text-gray-500 text-sm mt-1">Required since you edited your address</p>
+            </div>
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
+              <div className="flex flex-wrap gap-2">
+                {['GST Certificate', 'Trade License', 'Store Photo', 'Address Proof'].map((type) => (
+                  <button key={type} type="button" onClick={() => setDocumentType(type)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                      documentType === type ? 'bg-[#E3000F] border-[#E3000F] text-white' : 'border-gray-200 text-gray-600 bg-white'}`}>
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className={`flex flex-col items-center justify-center border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-colors ${
+              documentUrl ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50 hover:border-[#E3000F]'}`}>
+              <input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+              {uploading ? (
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E3000F]" />
+              ) : documentUrl ? (
+                <><span className="text-3xl mb-2">✅</span><p className="text-green-700 font-medium text-sm">Document uploaded</p><p className="text-gray-400 text-xs mt-1">Tap to replace</p></>
+              ) : (
+                <><span className="text-4xl mb-2">📄</span><p className="text-gray-600 font-medium">Tap to upload</p><p className="text-gray-400 text-xs mt-1">JPG, PNG or PDF · Max 5MB</p></>
+              )}
+            </label>
           </div>
         )}
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Store Name *</label>
-            <input
-              {...register('storeName', { required: 'Store name is required' })}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-              placeholder="Your store name"
-            />
-            {errors.storeName && <p className="text-red-500 text-xs mt-1">{errors.storeName.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
-            <input
-              {...register('addressLine1', { required: 'Address is required' })}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-              placeholder="Shop/Building number, Street"
-            />
-            {errors.addressLine1 && <p className="text-red-500 text-xs mt-1">{errors.addressLine1.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-            <input
-              {...register('addressLine2')}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-              placeholder="Area, Colony (optional)"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Landmark</label>
-            <input
-              {...register('landmark')}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-              placeholder="Nearby landmark (optional)"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-              <input
-                {...register('city', { required: 'City is required' })}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-                placeholder="City"
-              />
-              {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
-              <input
-                {...register('pincode', { required: 'Required', pattern: { value: /^\d{6}$/, message: '6 digits' } })}
-                inputMode="numeric"
-                maxLength={6}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-                placeholder="Pincode"
-              />
-              {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode.message}</p>}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-            <select
-              {...register('state', { required: 'State is required' })}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] bg-white transition-colors"
-            >
-              <option value="">Select State</option>
-              {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Alternate Mobile</label>
-            <input
-              {...register('alternateMobile')}
-              inputMode="numeric"
-              maxLength={10}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
-              placeholder="Alternate mobile (optional)"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Document Upload (conditional) ── */}
-      {detailsEdited && (
+        {/* Submit */}
         <div className="mt-8 px-4">
-          <div className="mb-3">
-            <h2 className="text-xl font-bold text-gray-800">Upload Document</h2>
-            <p className="text-gray-500 text-sm mt-1">Required since you edited your address</p>
-          </div>
+          <button type="submit" disabled={submitting || !giftConfirmed}
+            className="w-full bg-[#E3000F] text-white font-bold py-4 rounded-2xl text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform shadow-lg">
+            {submitting ? 'Submitting...' : 'Submit My Selection'}
+          </button>
+          {!selectedGift && (
+            <p className="text-center text-gray-400 text-xs mt-2">Select a gift above to continue</p>
+          )}
+          {selectedGift && !giftConfirmed && (
+            <p className="text-center text-gray-400 text-xs mt-2">Confirm your gift selection above to proceed</p>
+          )}
+        </div>
+      </form>
 
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
-            <div className="flex flex-wrap gap-2">
-              {['GST Certificate', 'Trade License', 'Visiting Card', 'Store Photo', 'Address Proof'].map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setDocumentType(type)}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
-                    documentType === type
-                      ? 'bg-[#E3000F] border-[#E3000F] text-white'
-                      : 'border-gray-200 text-gray-600 bg-white'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
+      {/* ── Pre-confirm: Gift Detail Modal ── */}
+      {modalGift && !giftConfirmed && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setModalGift(null)}>
+          <div className="bg-white rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className={`relative h-60 flex-none ${
+              modalGift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === modalGift.id) % GRADIENT_COLORS.length]}`}`}>
+              {modalGift.imageUrl
+                ? <Image src={modalGift.imageUrl} alt={modalGift.name} fill sizes="100vw" className="object-cover rounded-t-3xl" />
+                : <div className="flex items-center justify-center h-full rounded-t-3xl"><span className="text-9xl">🎁</span></div>}
+              <button onClick={() => setModalGift(null)}
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold">✕</button>
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 bg-white/50 rounded-full" />
+            </div>
+            <div className="p-5 pb-8">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-xl font-bold text-gray-800">{modalGift.name}</h2>
+                {modalGift.showMrp && modalGift.mrp && (
+                  <span className="flex-none bg-[#FFD200] text-gray-900 text-sm font-bold px-3 py-1 rounded-full">
+                    ₹{modalGift.mrp.toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <p className="text-gray-600 text-sm mt-3 leading-relaxed">{modalGift.description}</p>
+              <button onClick={() => handleSelectGift(modalGift)}
+                className={`w-full mt-6 font-bold py-4 rounded-2xl text-base transition-all shadow-md active:scale-95 ${
+                  selectedGift?.id === modalGift.id ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-[#E3000F] hover:bg-[#c0000d] text-white'}`}>
+                {selectedGift?.id === modalGift.id ? '✓ Currently Selected' : 'Select This Gift'}
+              </button>
             </div>
           </div>
-
-          <label className={`flex flex-col items-center justify-center border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-colors ${
-            documentUrl ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50 hover:border-[#E3000F]'
-          }`}>
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf"
-              className="hidden"
-              onChange={handleFileUpload}
-              disabled={uploading}
-            />
-            {uploading ? (
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E3000F]" />
-            ) : documentUrl ? (
-              <>
-                <span className="text-3xl mb-2">✅</span>
-                <p className="text-green-700 font-medium text-sm">Document uploaded</p>
-                <p className="text-gray-400 text-xs mt-1">Tap to replace</p>
-              </>
-            ) : (
-              <>
-                <span className="text-4xl mb-2">📄</span>
-                <p className="text-gray-600 font-medium">Tap to upload</p>
-                <p className="text-gray-400 text-xs mt-1">JPG, PNG or PDF · Max 5MB</p>
-              </>
-            )}
-          </label>
         </div>
       )}
 
-      {/* ── Submit ── */}
-      <div className="mt-8 px-4">
-        <button
-          type="submit"
-          disabled={submitting || !selectedGift}
-          className="w-full bg-[#E3000F] text-white font-bold py-4 rounded-2xl text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform shadow-lg"
-        >
-          {submitting ? 'Submitting...' : 'Submit My Selection'}
-        </button>
-        {!selectedGift && (
-          <p className="text-center text-gray-400 text-xs mt-2">Select a gift above to continue</p>
-        )}
-      </div>
-    </form>
+      {/* ── Post-confirm: Change Gift Bottom Sheet ── */}
+      {changeSheetOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60"
+          onClick={() => { if (!changeModalGift) setChangeSheetOpen(false); }}>
+          <div className="bg-white rounded-t-3xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">Change Your Gift</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Currently: <span className="font-medium text-gray-700">{selectedGift?.name}</span>
+                </p>
+              </div>
+              <button onClick={() => { setChangeSheetOpen(false); setChangeModalGift(null); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none">✕</button>
+            </div>
+            {/* Countdown */}
+            {countdown && !countdown.expired && (
+              <div className={`mx-5 mt-3 rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2 ${
+                countdown.urgent ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                <span>{countdown.urgent ? '⚠️' : '⏱️'}</span>
+                <span>{countdown.label}</span>
+              </div>
+            )}
+            {/* Gift list */}
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+              {gifts.map((gift, i) => {
+                const isCurrent = selectedGift?.id === gift.id;
+                return (
+                  <div key={gift.id} onClick={() => !isCurrent && setChangeModalGift(gift)}
+                    className={`flex gap-3 bg-white rounded-2xl shadow-sm overflow-hidden border transition-all ${
+                      isCurrent ? 'border-green-400 bg-green-50 cursor-default' : 'border-gray-100 cursor-pointer active:scale-[0.98] hover:shadow-md'}`}>
+                    <div className={`w-24 h-20 flex-none relative ${
+                      gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`}`}>
+                      {gift.imageUrl
+                        ? <Image src={gift.imageUrl} alt={gift.name} fill sizes="96px" className="object-cover" />
+                        : <div className="flex items-center justify-center h-full"><span className="text-3xl">🎁</span></div>}
+                      {isCurrent && (
+                        <div className="absolute top-1 left-1 bg-green-500 rounded-full w-5 h-5 flex items-center justify-center">
+                          <span className="text-white text-xs font-bold">✓</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 py-3 pr-3 flex flex-col justify-center min-w-0">
+                      <h3 className={`font-bold text-sm leading-tight ${isCurrent ? 'text-green-700' : 'text-gray-800'}`}>{gift.name}</h3>
+                      <p className="text-gray-500 text-xs mt-0.5 line-clamp-2">{gift.description}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {gift.showMrp && gift.mrp && (
+                          <span className="text-xs font-bold bg-[#FFD200] text-gray-900 px-2 py-0.5 rounded-full">
+                            ₹{gift.mrp.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                        <span className={`text-xs font-medium ${isCurrent ? 'text-green-600' : 'text-[#E3000F]'}`}>
+                          {isCurrent ? 'Current selection' : 'Tap to select →'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Post-confirm: Change Gift Detail Modal (above the sheet) ── */}
+      {changeModalGift && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={() => setChangeModalGift(null)}>
+          <div className="bg-white rounded-t-3xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className={`relative h-52 flex-none ${
+              changeModalGift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === changeModalGift.id) % GRADIENT_COLORS.length]}`}`}>
+              {changeModalGift.imageUrl
+                ? <Image src={changeModalGift.imageUrl} alt={changeModalGift.name} fill sizes="100vw" className="object-cover rounded-t-3xl" />
+                : <div className="flex items-center justify-center h-full rounded-t-3xl"><span className="text-9xl">🎁</span></div>}
+              <button onClick={() => setChangeModalGift(null)}
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold">✕</button>
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 bg-white/50 rounded-full" />
+            </div>
+            <div className="p-5 pb-8">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-xl font-bold text-gray-800">{changeModalGift.name}</h2>
+                {changeModalGift.showMrp && changeModalGift.mrp && (
+                  <span className="flex-none bg-[#FFD200] text-gray-900 text-sm font-bold px-3 py-1 rounded-full">
+                    ₹{changeModalGift.mrp.toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <p className="text-gray-600 text-sm mt-3 leading-relaxed">{changeModalGift.description}</p>
+              <button onClick={() => handleChangeGift(changeModalGift)} disabled={changingGift}
+                className="w-full mt-6 bg-[#E3000F] hover:bg-[#c0000d] text-white font-bold py-4 rounded-2xl text-base transition-all shadow-md active:scale-95 disabled:opacity-60">
+                {changingGift ? 'Changing…' : `Switch to ${changeModalGift.name}`}
+              </button>
+              <button onClick={() => setChangeModalGift(null)} className="w-full mt-3 text-gray-500 text-sm font-medium py-2">
+                Cancel — go back
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

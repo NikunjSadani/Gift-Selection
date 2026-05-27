@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { getCampaignStatus } from '@/lib/campaign';
+import { getRetailerByMobile } from '@/lib/firestore';
 import { generateOtp, sendOtp } from '@/lib/otp';
+import { createOtpRecord, deleteOtpsByMobile } from '@/lib/otp-store';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'campaign_inactive', status }, { status: 403 });
     }
 
-    const retailer = await prisma.retailer.findUnique({ where: { mobile } });
+    const retailer = await getRetailerByMobile(mobile);
     if (!retailer) {
       return NextResponse.json({ error: 'not_registered' }, { status: 404 });
     }
@@ -25,16 +26,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'inactive' }, { status: 403 });
     }
 
-    // Delete old OTPs for this mobile
-    await prisma.otpRecord.deleteMany({ where: { mobile } });
+    // Remove old OTPs and issue a fresh one
+    await deleteOtpsByMobile(mobile);
 
-    const otp = generateOtp();
+    const otp       = generateOtp();
     const expiresAt = new Date(Date.now() + setting.otpExpiryMinutes * 60 * 1000);
 
-    await prisma.otpRecord.create({
-      data: { mobile, otp, expiresAt },
-    });
-
+    await createOtpRecord(mobile, otp, expiresAt);
     await sendOtp(mobile, otp);
 
     return NextResponse.json({

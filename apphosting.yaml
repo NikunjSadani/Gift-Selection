@@ -1,0 +1,51 @@
+runConfig:
+  runtime: nodejs20
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+  maxInstances: 10
+  minInstances: 0
+
+env:
+  # ── Public (non-secret) ───────────────────────────────────────────────────
+  - variable: NODE_ENV
+    value: production
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ── Secrets (stored in Google Secret Manager, set per environment) ────────
+  - variable: JWT_SECRET
+    secret: JWT_SECRET
+    availability:
+      - RUNTIME
+
+  - variable: ADMIN_JWT_SECRET
+    secret: ADMIN_JWT_SECRET
+    availability:
+      - RUNTIME
+
+  - variable: MSG91_API_KEY
+    secret: MSG91_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: MSG91_SENDER_ID
+    secret: MSG91_SENDER_ID
+    availability:
+      - RUNTIME
+
+  - variable: MSG91_TEMPLATE_ID
+    secret: MSG91_TEMPLATE_ID
+    availability:
+      - RUNTIME
+
+  - variable: FIREBASE_STORAGE_BUCKET
+    secret: FIREBASE_STORAGE_BUCKET
+    availability:
+      - RUNTIME
+
+  - variable: FIREBASE_SERVICE_ACCOUNT_KEY
+    secret: FIREBASE_SERVICE_ACCOUNT_KEY
+    availability:
+      - RUNTIME

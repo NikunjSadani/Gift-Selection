@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { verifyRetailerToken } from '@/lib/auth';
+import { getDraftByRetailerId } from '@/lib/firestore';
+import { db } from '@/lib/firebase-admin';
 
 async function getRetailerId(request: NextRequest) {
   const token = request.cookies.get('retailer_token')?.value;
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const draft = await prisma.draft.findUnique({ where: { retailerId } });
+  const draft = await getDraftByRetailerId(retailerId);
   return NextResponse.json({ draft });
 }
 
@@ -31,24 +32,55 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { step, giftId, formData } = body;
+    const { step, giftId, giftConfirmed, formData } = body;
 
-    const draft = await prisma.draft.upsert({
-      where: { retailerId },
-      create: {
+    // giftSelectedAt is the 24-hour clock start — it is stamped exactly once:
+    // when giftConfirmed first flips to true ("Confirm My Gift Selection" click).
+    // Subsequent gift changes or saves must NOT overwrite it.
+    let confirmedAt: Date | undefined;
+    if (giftConfirmed === true) {
+      const existing = await getDraftByRetailerId(retailerId);
+      // Only stamp if this is the very first confirmation
+      if (!existing?.giftConfirmed && !existing?.giftSelectedAt) {
+        confirmedAt = new Date();
+      }
+    }
+
+    const docRef = db.collection('drafts').doc(retailerId);
+    const existing = await docRef.get();
+
+    const updateData: Record<string, unknown> = {
+      retailerId,
+      step: step || 'gift',
+      updatedAt: new Date(),
+    };
+
+    if (giftId !== undefined) updateData.giftId = giftId;
+    if (giftConfirmed !== undefined) updateData.giftConfirmed = giftConfirmed;
+    if (confirmedAt) updateData.giftSelectedAt = confirmedAt;
+    if (formData !== undefined) updateData.formData = formData ? JSON.stringify(formData) : null;
+
+    if (!existing.exists) {
+      // Create
+      const createData = {
         retailerId,
         step: step || 'gift',
         giftId: giftId || null,
+        giftConfirmed: giftConfirmed ?? false,
+        giftSelectedAt: giftConfirmed ? new Date() : null,
         formData: formData ? JSON.stringify(formData) : null,
-      },
-      update: {
-        step: step || 'gift',
-        giftId: giftId !== undefined ? giftId : undefined,
-        formData: formData !== undefined ? JSON.stringify(formData) : undefined,
-      },
-    });
-
-    return NextResponse.json({ draft });
+        updatedAt: new Date(),
+      };
+      await docRef.set(createData, { merge: true });
+      const draft = { id: retailerId, ...createData };
+      return NextResponse.json({ draft });
+    } else {
+      await docRef.set(updateData, { merge: true });
+      const updated = await docRef.get();
+      const data = updated.data() as Record<string, unknown>;
+      const draft = { id: retailerId, ...data };
+      return NextResponse.json({ draft });
+    }
   } catch (err) {
     console.error('[draft POST]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

@@ -26,6 +26,16 @@ interface Gift {
   description: string;
 }
 
+function Field({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className="text-gray-800 font-medium">{value}</p>
+    </div>
+  );
+}
+
 export default function ReviewPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -123,14 +133,6 @@ export default function ReviewPage() {
       </div>
     );
   }
-
-  const Field = ({ label, value }: { label: string; value?: string }) =>
-    value ? (
-      <div>
-        <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-        <p className="text-gray-800 font-medium">{value}</p>
-      </div>
-    ) : null;
 
   return (
     <div className="p-4 pb-8">

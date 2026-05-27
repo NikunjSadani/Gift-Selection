@@ -58,6 +58,7 @@ export default function GiftsPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchGifts(); }, []);
 
   const openCreate = () => {
