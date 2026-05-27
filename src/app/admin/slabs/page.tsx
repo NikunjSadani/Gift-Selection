@@ -35,6 +35,7 @@ export default function SlabsPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSlabs(); }, []);
 
   const openCreate = () => {

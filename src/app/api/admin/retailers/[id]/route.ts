@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyAdminToken } from '@/lib/auth';
+import { db } from '@/lib/firebase-admin';
+import { verifyAdminToken, requireSuperAdmin } from '@/lib/auth';
+import {
+  getRetailerById,
+  getSubmissionByRetailerId,
+  getDraftByRetailerId,
+  getSlabById,
+} from '@/lib/firestore';
 
 async function requireAdmin(request: NextRequest) {
   const token = request.cookies.get('admin_token')?.value;
@@ -13,17 +19,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     await requireAdmin(request);
     const { id } = await params;
 
-    const retailer = await prisma.retailer.findUnique({
-      where: { id },
-      include: {
-        slab: true,
-        submission: { include: { gift: true } },
-        draft: true,
-      },
-    });
-
+    const retailer = await getRetailerById(id);
     if (!retailer) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-    return NextResponse.json({ retailer });
+
+    const [submission, draft, slab] = await Promise.all([
+      getSubmissionByRetailerId(id),
+      getDraftByRetailerId(id),
+      getSlabById(retailer.slabId),
+    ]);
+
+    return NextResponse.json({ retailer: { ...retailer, slab, submission, draft } });
   } catch (err) {
     if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
@@ -33,47 +38,51 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const adminPayload = await requireAdmin(request);
+    requireSuperAdmin(adminPayload);
     const { id } = await params;
 
-    const before = await prisma.retailer.findUnique({ where: { id } });
+    const before = await getRetailerById(id);
     if (!before) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
     const body = await request.json();
 
-    const retailer = await prisma.retailer.update({
-      where: { id },
-      data: {
-        name: body.name,
-        ownerName: body.ownerName,
-        mobile: body.mobile,
-        slabId: body.slabId,
-        ndaCode: body.ndaCode,
-        addressLine1: body.addressLine1,
-        addressLine2: body.addressLine2,
-        city: body.city,
-        state: body.state,
-        pincode: body.pincode,
-        gstNumber: body.gstNumber,
-        status: body.status,
-      },
-    });
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.ownerName !== undefined) updateData.ownerName = body.ownerName;
+    if (body.mobile !== undefined) updateData.mobile = body.mobile;
+    if (body.slabId !== undefined) updateData.slabId = body.slabId;
+    if (body.ndaCode !== undefined) updateData.ndaCode = body.ndaCode;
+    if (body.addressLine1 !== undefined) updateData.addressLine1 = body.addressLine1;
+    if (body.addressLine2 !== undefined) updateData.addressLine2 = body.addressLine2;
+    if (body.city !== undefined) updateData.city = body.city;
+    if (body.state !== undefined) updateData.state = body.state;
+    if (body.pincode !== undefined) updateData.pincode = body.pincode;
+    if (body.gstNumber !== undefined) updateData.gstNumber = body.gstNumber;
+    if (body.status !== undefined) updateData.status = body.status;
 
-    await prisma.auditLog.create({
-      data: {
-        adminId: adminPayload.adminId,
-        adminEmail: adminPayload.email,
-        action: 'UPDATE_RETAILER',
-        entityType: 'Retailer',
-        entityId: id,
-        beforeValue: JSON.stringify(before),
-        afterValue: JSON.stringify(retailer),
-        ipAddress: request.headers.get('x-forwarded-for') || '',
-      },
+    await db.collection('retailers').doc(id).update(updateData);
+
+    const retailer = await getRetailerById(id);
+
+    await db.collection('auditLogs').add({
+      adminId: adminPayload.adminId,
+      adminEmail: adminPayload.email,
+      action: 'UPDATE_RETAILER',
+      entityType: 'Retailer',
+      entityId: id,
+      beforeValue: JSON.stringify(before),
+      afterValue: JSON.stringify(retailer),
+      ipAddress: request.headers.get('x-forwarded-for') || '',
+      createdAt: new Date(),
     });
 
     return NextResponse.json({ retailer });
   } catch (err) {
-    if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const e = err as Error & { status?: number };
+    if (e.message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (e.status === 403) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }
@@ -82,14 +91,40 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const adminPayload = await requireAdmin(request);
     const { id } = await params;
+    const hard = new URL(request.url).searchParams.get('hard') === 'true';
 
-    const retailer = await prisma.retailer.update({
-      where: { id },
-      data: { status: 'deleted' },
-    });
+    // Hard delete requires superadmin
+    if (hard) requireSuperAdmin(adminPayload);
 
-    await prisma.auditLog.create({
-      data: {
+    const before = await getRetailerById(id);
+    if (!before) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+    if (hard) {
+      // Cascade: delete submission, draft, then retailer
+      const subSnap = await db.collection('submissions').where('retailerId', '==', id).get();
+      const batch = db.batch();
+      subSnap.docs.forEach((d) => batch.delete(d.ref));
+      batch.delete(db.collection('drafts').doc(id));
+      batch.delete(db.collection('retailers').doc(id));
+      await batch.commit();
+
+      await db.collection('auditLogs').add({
+        adminId: adminPayload.adminId,
+        adminEmail: adminPayload.email,
+        action: 'HARD_DELETE_RETAILER',
+        entityType: 'Retailer',
+        entityId: id,
+        beforeValue: JSON.stringify(before),
+        ipAddress: request.headers.get('x-forwarded-for') || '',
+        createdAt: new Date(),
+      });
+
+      return NextResponse.json({ success: true, deleted: true });
+    } else {
+      await db.collection('retailers').doc(id).update({ status: 'deleted', updatedAt: new Date() });
+      const retailer = await getRetailerById(id);
+
+      await db.collection('auditLogs').add({
         adminId: adminPayload.adminId,
         adminEmail: adminPayload.email,
         action: 'DELETE_RETAILER',
@@ -97,12 +132,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         entityId: id,
         afterValue: JSON.stringify({ status: 'deleted' }),
         ipAddress: request.headers.get('x-forwarded-for') || '',
-      },
-    });
+        createdAt: new Date(),
+      });
 
-    return NextResponse.json({ success: true, retailer });
+      return NextResponse.json({ success: true, retailer });
+    }
   } catch (err) {
-    if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const e = err as Error & { status?: number };
+    if (e.message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (e.status === 403) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }

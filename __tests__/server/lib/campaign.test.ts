@@ -1,20 +1,21 @@
 /**
- * Tests for the campaign status logic in src/lib/campaign.ts
- * Uses jest.unstable_mockModule (the ESM-compatible mock API).
- * All imports are dynamic so mocks are in place before the module loads.
+ * TDD tests for src/lib/campaign.ts (Firestore version)
+ *
+ * Mocks @/lib/firebase-admin so the real Firebase SDK never initialises.
+ * Firestore snapshots are simulated with plain objects:
+ *   { exists: boolean, id: string, data: () => object }
  */
 import { jest } from '@jest/globals';
 
-// ── Mock prisma before any module that imports it is loaded ───────────────────
-const mockFindFirst = jest.fn<() => Promise<unknown>>();
-const mockCreate    = jest.fn<() => Promise<unknown>>();
+// ── Mock firebase-admin before any import that touches it ─────────────────────
+const mockGet = jest.fn<() => Promise<unknown>>();
+const mockSet = jest.fn<() => Promise<unknown>>();
 
-await jest.unstable_mockModule('@/lib/prisma', () => ({
-  prisma: {
-    campaignSetting: {
-      findFirst: mockFindFirst,
-      create:    mockCreate,
-    },
+await jest.unstable_mockModule('@/lib/firebase-admin', () => ({
+  db: {
+    collection: jest.fn(() => ({
+      doc: jest.fn(() => ({ get: mockGet, set: mockSet })),
+    })),
   },
 }));
 
@@ -22,9 +23,18 @@ await jest.unstable_mockModule('@/lib/prisma', () => ({
 const { getCampaignStatus, getOrCreateCampaignSetting } =
   await import('@/lib/campaign');
 
-// ── Shared fixture ─────────────────────────────────────────────────────────────
-const baseSetting = {
-  id: 'setting-1',
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Build a Firestore-like snapshot that "exists" */
+function existsSnap(data: Record<string, unknown>) {
+  return { exists: true, id: 'campaign', data: () => data };
+}
+
+/** Snapshot that does not exist */
+const missingSnap = { exists: false, id: 'campaign', data: () => undefined };
+
+// ── Base setting (no dates, no forceStatus) ───────────────────────────────────
+const baseData = {
   campaignName: 'Test Campaign',
   startDate: null,
   endDate: null,
@@ -38,24 +48,41 @@ const baseSetting = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSet.mockResolvedValue(undefined);
 });
 
 // ── getOrCreateCampaignSetting ─────────────────────────────────────────────────
 
 describe('getOrCreateCampaignSetting', () => {
-  it('returns existing setting if found', async () => {
-    mockFindFirst.mockResolvedValue(baseSetting);
+  it('returns existing setting when document exists', async () => {
+    mockGet.mockResolvedValue(existsSnap(baseData));
     const result = await getOrCreateCampaignSetting();
-    expect(result).toEqual(baseSetting);
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(result.id).toBe('campaign');
+    expect(result.campaignName).toBe('Test Campaign');
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it('creates a default setting when none exists', async () => {
-    mockFindFirst.mockResolvedValue(null);
-    mockCreate.mockResolvedValue({ ...baseSetting, id: 'new-setting' });
+  it('creates and returns default setting when document is missing', async () => {
+    mockGet.mockResolvedValue(missingSnap);
     const result = await getOrCreateCampaignSetting();
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect((result as typeof baseSetting).id).toBe('new-setting');
+    expect(mockSet).toHaveBeenCalledTimes(1);
+    expect(result.id).toBe('campaign');
+    expect(result.otpExpiryMinutes).toBe(5);
+  });
+
+  it('converts Firestore Timestamp-like objects (with toDate) to Date', async () => {
+    const future = new Date(Date.now() + 86400000);
+    const firestoreTimestamp = { toDate: () => future };
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, startDate: firestoreTimestamp }));
+    const result = await getOrCreateCampaignSetting();
+    expect(result.startDate).toEqual(future);
+  });
+
+  it('handles plain Date objects stored in Firestore (dev/seed scenarios)', async () => {
+    const future = new Date(Date.now() + 86400000);
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, startDate: future }));
+    const result = await getOrCreateCampaignSetting();
+    expect(result.startDate).toEqual(future);
   });
 });
 
@@ -63,19 +90,19 @@ describe('getOrCreateCampaignSetting', () => {
 
 describe('getCampaignStatus — forceStatus', () => {
   it('returns active when forceStatus is active', async () => {
-    mockFindFirst.mockResolvedValue({ ...baseSetting, forceStatus: 'active' });
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, forceStatus: 'active' }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('active');
   });
 
   it('returns before when forceStatus is before', async () => {
-    mockFindFirst.mockResolvedValue({ ...baseSetting, forceStatus: 'before' });
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, forceStatus: 'before' }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('before');
   });
 
   it('returns closed when forceStatus is closed', async () => {
-    mockFindFirst.mockResolvedValue({ ...baseSetting, forceStatus: 'closed' });
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, forceStatus: 'closed' }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('closed');
   });
@@ -86,30 +113,30 @@ describe('getCampaignStatus — forceStatus', () => {
 describe('getCampaignStatus — date logic (no forceStatus)', () => {
   it('returns before when campaign has not started yet', async () => {
     const future = new Date(Date.now() + 86400000 * 7);
-    mockFindFirst.mockResolvedValue({ ...baseSetting, startDate: future });
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, startDate: future }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('before');
   });
 
   it('returns closed when campaign has ended', async () => {
     const past = new Date(Date.now() - 86400000 * 7);
-    mockFindFirst.mockResolvedValue({ ...baseSetting, endDate: past });
+    mockGet.mockResolvedValue(existsSnap({ ...baseData, endDate: past }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('closed');
   });
 
   it('returns active when within campaign window', async () => {
-    mockFindFirst.mockResolvedValue({
-      ...baseSetting,
-      startDate: new Date(Date.now() - 86400000),  // started yesterday
-      endDate:   new Date(Date.now() + 86400000),  // ends tomorrow
-    });
+    mockGet.mockResolvedValue(existsSnap({
+      ...baseData,
+      startDate: new Date(Date.now() - 86400000),
+      endDate: new Date(Date.now() + 86400000),
+    }));
     const { status } = await getCampaignStatus();
     expect(status).toBe('active');
   });
 
   it('returns active when no dates are set', async () => {
-    mockFindFirst.mockResolvedValue(baseSetting);
+    mockGet.mockResolvedValue(existsSnap(baseData));
     const { status } = await getCampaignStatus();
     expect(status).toBe('active');
   });

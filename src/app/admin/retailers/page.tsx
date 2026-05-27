@@ -11,6 +11,8 @@ interface Retailer {
   name: string;
   mobile: string;
   status: string;
+  cso: string | null;
+  csoPhone: string | null;
   slab: { name: string };
   submission?: { referenceId: string; submittedAt: string } | null;
 }
@@ -22,6 +24,7 @@ interface Slab {
 
 export default function RetailersPage() {
   const router = useRouter();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [slabs, setSlabs] = useState<Slab[]>([]);
   const [total, setTotal] = useState(0);
@@ -33,8 +36,18 @@ export default function RetailersPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ retailerId: '', name: '', ownerName: '', mobile: '', slabId: '' });
   const [saving, setSaving] = useState(false);
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState<Retailer | null>(null);
+  const [hardDeleting, setHardDeleting] = useState(false);
+  const [uploadSummary, setUploadSummary] = useState<{ imported: number; skipped: number; failed: number; reportRows: Record<string, unknown>[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const limit = 20;
+
+  useEffect(() => {
+    fetch('/api/admin/me', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => { if (d?.admin?.role === 'superadmin') setIsSuperAdmin(true); })
+      .catch(() => {});
+  }, []);
 
   const fetchRetailers = async () => {
     setLoading(true);
@@ -62,6 +75,7 @@ export default function RetailersPage() {
       .then((d) => setSlabs(d.slabs || []));
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRetailers(); }, [page, search, slabFilter, statusFilter]);
 
   const handleCreate = async () => {
@@ -105,25 +119,55 @@ export default function RetailersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this retailer?')) return;
+    if (!confirm('Soft-delete this retailer? Their data will be kept but they cannot log in.')) return;
     try {
       await fetch(`/api/admin/retailers/${id}`, { method: 'DELETE', credentials: 'include' });
-      toast.success('Retailer deleted');
+      toast.success('Retailer deactivated');
       fetchRetailers();
     } catch {
       toast.error('Failed to delete retailer');
     }
   };
 
+  const handleHardDelete = async () => {
+    if (!hardDeleteConfirm) return;
+    setHardDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/retailers/${hardDeleteConfirm.id}?hard=true`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('failed');
+      toast.success(`Retailer ${hardDeleteConfirm.retailerId} permanently deleted`);
+      setHardDeleteConfirm(null);
+      fetchRetailers();
+    } catch {
+      toast.error('Failed to hard-delete retailer');
+    } finally {
+      setHardDeleting(false);
+    }
+  };
+
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (fileRef.current) fileRef.current.value = '';
+
+    const toastId = 'bulk-upload';
+    toast.loading('Reading file…', { id: toastId });
 
     try {
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws) as Record<string, string>[];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+
+      if (rows.length === 0) {
+        toast.error('The file has no data rows.', { id: toastId });
+        return;
+      }
+
+      toast.loading(`Uploading ${rows.length} rows…`, { id: toastId });
 
       const res = await fetch('/api/admin/retailers/bulk', {
         method: 'POST',
@@ -131,23 +175,91 @@ export default function RetailersPage() {
         credentials: 'include',
         body: JSON.stringify({ rows }),
       });
-      const result = await res.json();
-      toast.success(`Imported ${result.imported}, failed ${result.failed}`);
-      fetchRetailers();
-    } catch {
-      toast.error('Bulk import failed');
-    }
 
-    if (fileRef.current) fileRef.current.value = '';
+      const result = await res.json();
+      toast.dismiss(toastId);
+
+      if (!res.ok) {
+        toast.error(`Upload failed: ${result.error || 'server error'}`);
+        return;
+      }
+
+      // Build per-row report using the rowResults array returned by the API
+      type RowResult = { row: number; status: 'Imported' | 'Skipped' | 'Failed'; remark: string };
+      const resultByIndex = new Map<number, RowResult>();
+      (result.rowResults as RowResult[] || []).forEach((r) => {
+        resultByIndex.set(r.row - 2, r); // row is 1-based with header → convert to 0-based index
+      });
+
+      const reportRows = rows.map((row, i) => {
+        const r = resultByIndex.get(i);
+        return {
+          ...row,
+          'Upload Status': r?.status ?? 'Imported',
+          'Remarks': r?.remark ?? '',
+        };
+      });
+
+      setUploadSummary({ imported: result.imported, skipped: result.skipped ?? 0, failed: result.failed, reportRows });
+      fetchRetailers();
+    } catch (err) {
+      toast.dismiss(toastId);
+      console.error('[bulk upload]', err);
+      toast.error(`Upload failed: ${(err as Error).message}`);
+    }
+  };
+
+  const downloadReport = () => {
+    if (!uploadSummary) return;
+    const ws = XLSX.utils.json_to_sheet(uploadSummary.reportRows);
+    // Color-hint: mark Upload Status column header
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Upload Report');
+    const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbOut], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `retailer-upload-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const downloadTemplate = () => {
+    // Column headers match exactly what the bulk-upload API expects
     const ws = XLSX.utils.json_to_sheet([
-      { retailerId: 'R001', name: 'Sample Store', ownerName: 'John Doe', mobile: '9999900001', slabId: 'TIER_1', ndaCode: '', addressLine1: '', city: '', state: '', pincode: '' },
+      {
+        'Retailer ID':      'R001',
+        'Retailer Name':    'Sample Store',
+        'Owner Name':       'John Doe',
+        'Phone Number':     '9999900001',
+        'Address Line 1':   '123, MG Road',
+        'Address Line 2':   'Near City Mall',
+        'State':            'Maharashtra',
+        'City':             'Mumbai',
+        'Pin Code':         '400001',
+        'Landmark':         'Near Railway Station',
+        'CSO':              'Rahul Sharma',
+        'CSO Phone Number': '9876543210',
+        'Slab Winner':      '4K',
+      },
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Retailers');
-    XLSX.writeFile(wb, 'retailer-template.xlsx');
+
+    // Blob + anchor — reliable in all browsers (XLSX.writeFile uses fs which isn't available client-side)
+    const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbOut], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'retailer-upload-template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -167,6 +279,34 @@ export default function RetailersPage() {
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.csv" onChange={handleBulkUpload} className="hidden" />
       </div>
+
+      {/* Upload Result Banner */}
+      {uploadSummary && (
+        <div className={`rounded-xl p-4 mb-4 flex items-center justify-between gap-4 ${
+          uploadSummary.failed === 0 ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{uploadSummary.failed === 0 ? '✅' : '⚠️'}</span>
+            <div>
+              <div className="flex gap-4 text-sm font-semibold">
+                <span className="text-green-700">✓ {uploadSummary.imported} imported</span>
+                {uploadSummary.skipped > 0 && <span className="text-blue-600">⊘ {uploadSummary.skipped} skipped (already exist)</span>}
+                {uploadSummary.failed  > 0 && <span className="text-red-600">✕ {uploadSummary.failed} failed</span>}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">Download the report for row-by-row details and remarks.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadReport}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap"
+            >
+              ⬇ Download Report
+            </button>
+            <button onClick={() => setUploadSummary(null)} className="text-gray-400 hover:text-gray-600 text-lg px-1">✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl p-4 mb-4 flex flex-wrap gap-3">
@@ -205,6 +345,7 @@ export default function RetailersPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Mobile</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Slab</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">CSO</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Submission</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Actions</th>
@@ -213,11 +354,11 @@ export default function RetailersPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-gray-400">Loading...</td>
+                  <td colSpan={8} className="text-center py-8 text-gray-400">Loading...</td>
                 </tr>
               ) : retailers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-gray-400">No retailers found</td>
+                  <td colSpan={8} className="text-center py-8 text-gray-400">No retailers found</td>
                 </tr>
               ) : retailers.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
@@ -225,6 +366,16 @@ export default function RetailersPage() {
                   <td className="px-4 py-3 font-medium">{r.name}</td>
                   <td className="px-4 py-3">{r.mobile}</td>
                   <td className="px-4 py-3">{r.slab?.name}</td>
+                  <td className="px-4 py-3">
+                    {r.cso ? (
+                      <div>
+                        <p className="text-sm">{r.cso}</p>
+                        {r.csoPhone && <p className="text-xs text-gray-400">{r.csoPhone}</p>}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-xs">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       r.status === 'active' ? 'bg-green-100 text-green-700' :
@@ -241,14 +392,26 @@ export default function RetailersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {r.status === 'active' ? (
-                        <button onClick={() => handleStatusChange(r.id, 'inactive')} className="text-xs text-amber-600 hover:underline">Deactivate</button>
-                      ) : r.status === 'inactive' ? (
-                        <button onClick={() => handleStatusChange(r.id, 'active')} className="text-xs text-green-600 hover:underline">Activate</button>
-                      ) : null}
-                      <button onClick={() => handleDelete(r.id)} className="text-xs text-red-500 hover:underline">Delete</button>
-                    </div>
+                    {isSuperAdmin ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {r.status === 'active' ? (
+                          <button onClick={() => handleStatusChange(r.id, 'inactive')} className="text-xs text-amber-600 hover:underline">Deactivate</button>
+                        ) : r.status === 'inactive' ? (
+                          <button onClick={() => handleStatusChange(r.id, 'active')} className="text-xs text-green-600 hover:underline">Activate</button>
+                        ) : null}
+                        {r.status !== 'deleted' && (
+                          <button onClick={() => handleDelete(r.id)} className="text-xs text-gray-500 hover:underline">Soft Delete</button>
+                        )}
+                        <button
+                          onClick={() => setHardDeleteConfirm(r)}
+                          className="text-xs text-red-600 font-bold hover:underline"
+                        >
+                          ⚡ Hard Delete
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -275,6 +438,34 @@ export default function RetailersPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Hard Delete Confirm ── */}
+      {hardDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <div className="text-center mb-4">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">Permanently Delete?</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                This will permanently erase <span className="font-bold text-gray-800">{hardDeleteConfirm.name}</span> ({hardDeleteConfirm.retailerId})
+                along with their submission and draft. <span className="text-red-600 font-semibold">This cannot be undone.</span>
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setHardDeleteConfirm(null)}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium">
+                Cancel
+              </button>
+              <button onClick={handleHardDelete} disabled={hardDeleting}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-60">
+                {hardDeleting ? 'Deleting…' : 'Yes, Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Retailer Modal */}
       {showModal && (

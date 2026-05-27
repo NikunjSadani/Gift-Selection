@@ -1,9 +1,10 @@
-{
+﻿{
   "version": "0.0.1",
+  "autoPort": false,
   "configurations": [
     {
-      "name": "kwality-walls-dev",
-      "runtimeExecutable": "npm",
+      "name": "kwality-walls",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
       "runtimeArgs": ["run", "dev"],
       "port": 3001
     }

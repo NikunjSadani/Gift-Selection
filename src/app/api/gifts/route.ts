@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { verifyRetailerToken } from '@/lib/auth';
+import { getRetailerById, getGiftsForSlab } from '@/lib/firestore';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,35 +10,14 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = await verifyRetailerToken(token);
-    const retailer = await prisma.retailer.findUnique({
-      where: { id: payload.retailerId },
-    });
+    const retailer = await getRetailerById(payload.retailerId);
 
     if (!retailer) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
 
-    const mappings = await prisma.giftSlabMapping.findMany({
-      where: { slabId: retailer.slabId },
-      orderBy: { displaySequence: 'asc' },
-      include: {
-        gift: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            imageUrl: true,
-            mrp: true,
-            showMrp: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    const gifts = mappings
-      .filter((m) => m.gift.status === 'active')
-      .map((m) => m.gift);
+    const allGifts = await getGiftsForSlab(retailer.slabId);
+    const gifts = allGifts.filter((g) => g.status === 'active');
 
     return NextResponse.json({ gifts });
   } catch (err) {

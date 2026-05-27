@@ -11,7 +11,7 @@ interface DashboardData {
   pendingCount: number;
   notStarted: number;
   slabWise: { id: string; name: string; totalRetailers: number; submissions: number }[];
-  giftWise: { id: string; name: string; count: number }[];
+  giftWise: { id: string; name: string; submitted: number; inProgress: number; total: number }[];
   whatsappSuccessRate: number;
 }
 
@@ -90,28 +90,76 @@ export default function DashboardPage() {
 
         {/* Gift wise */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="font-bold text-gray-800 mb-4">Gift Selection Count</h2>
-          <div className="space-y-3">
-            {data.giftWise.sort((a, b) => b.count - a.count).map((g) => (
-              <div key={g.id} className="flex items-center gap-3">
-                <div className="flex-1">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-700 truncate">{g.name}</span>
-                    <span className="text-gray-500 ml-2">{g.count}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#E3000F] rounded-full"
-                      style={{
-                        width: data.totalSubmissions > 0 ? `${(g.count / data.totalSubmissions) * 100}%` : '0%',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {data.giftWise.length === 0 && <p className="text-gray-400 text-sm">No submissions yet</p>}
-          </div>
+          <h2 className="font-bold text-gray-800 mb-1">Gift Selection</h2>
+          <p className="text-xs text-gray-400 mb-4">In Progress + Submitted</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-gray-400 border-b">
+                <th className="text-left pb-2">Gift</th>
+                <th className="text-right pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                    In Progress
+                  </span>
+                </th>
+                <th className="text-right pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                    Submitted
+                  </span>
+                </th>
+                <th className="text-right pb-2 font-semibold text-gray-600">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.giftWise.length === 0 ? (
+                <tr><td colSpan={4} className="text-center py-6 text-gray-400">No selections yet</td></tr>
+              ) : (
+                [...data.giftWise].sort((a, b) => b.total - a.total).map((g) => {
+                  const maxTotal = Math.max(...data.giftWise.map((x) => x.total), 1);
+                  return (
+                    <tr key={g.id} className="border-b last:border-0">
+                      <td className="py-2.5">
+                        <p className="font-medium text-gray-800 truncate max-w-[140px]">{g.name}</p>
+                        {/* Progress bar split into in-progress + submitted */}
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5 w-full">
+                          <div className="h-full flex">
+                            <div
+                              className="bg-green-500 h-full"
+                              style={{ width: `${(g.submitted / maxTotal) * 100}%` }}
+                            />
+                            <div
+                              className="bg-amber-400 h-full"
+                              style={{ width: `${(g.inProgress / maxTotal) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-right py-2.5 text-amber-600 font-medium">{g.inProgress}</td>
+                      <td className="text-right py-2.5 text-green-600 font-medium">{g.submitted}</td>
+                      <td className="text-right py-2.5 font-bold text-gray-800">{g.total}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {data.giftWise.length > 0 && (
+              <tfoot>
+                <tr className="border-t">
+                  <td className="pt-2 text-xs text-gray-400 font-medium">Total</td>
+                  <td className="text-right pt-2 text-amber-600 font-bold text-xs">
+                    {data.giftWise.reduce((s, g) => s + g.inProgress, 0)}
+                  </td>
+                  <td className="text-right pt-2 text-green-600 font-bold text-xs">
+                    {data.giftWise.reduce((s, g) => s + g.submitted, 0)}
+                  </td>
+                  <td className="text-right pt-2 font-black text-gray-800 text-xs">
+                    {data.giftWise.reduce((s, g) => s + g.total, 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
       </div>
 

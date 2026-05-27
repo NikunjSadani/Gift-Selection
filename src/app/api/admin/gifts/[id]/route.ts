@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/firebase-admin';
 import { verifyAdminToken } from '@/lib/auth';
 
 async function requireAdmin(request: NextRequest) {
@@ -12,11 +12,36 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     await requireAdmin(request);
     const { id } = await params;
-    const gift = await prisma.gift.findUnique({
-      where: { id },
-      include: { slabMappings: { include: { slab: true } }, _count: { select: { submissions: true } } },
-    });
-    if (!gift) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+    const giftSnap = await db.collection('gifts').doc(id).get();
+    if (!giftSnap.exists) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+    const giftData = giftSnap.data() as Record<string, unknown>;
+
+    // Get slab mappings for this gift
+    const mappingsSnap = await db.collection('giftSlabMappings').where('giftId', '==', id).get();
+    const slabMappings = await Promise.all(
+      mappingsSnap.docs.map(async (d) => {
+        const data = d.data() as Record<string, unknown>;
+        const slabSnap = await db.collection('slabs').doc(data.slabId as string).get();
+        return {
+          ...data,
+          slab: slabSnap.exists ? { id: slabSnap.id, ...(slabSnap.data() as Record<string, unknown>) } : null,
+        };
+      }),
+    );
+
+    // Count submissions for this giftId
+    const submissionsSnap = await db.collection('submissions').where('giftId', '==', id).get();
+    const submissionCount = submissionsSnap.size;
+
+    const gift = {
+      id,
+      ...giftData,
+      slabMappings,
+      _count: { submissions: submissionCount },
+    };
+
     return NextResponse.json({ gift });
   } catch (err) {
     if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -33,32 +58,50 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Update slab mappings if provided
     if (slabIds !== undefined) {
-      await prisma.giftSlabMapping.deleteMany({ where: { giftId: id } });
-      if (slabIds.length > 0) {
-        await prisma.giftSlabMapping.createMany({
-          data: slabIds.map((slabId: string, idx: number) => ({
-            giftId: id,
-            slabId,
-            displaySequence: idx,
-          })),
+      // Delete existing mappings
+      const existingSnap = await db.collection('giftSlabMappings').where('giftId', '==', id).get();
+      const batch = db.batch();
+      existingSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+
+      // Create new mappings
+      for (let idx = 0; idx < slabIds.length; idx++) {
+        await db.collection('giftSlabMappings').add({
+          giftId: id,
+          slabId: slabIds[idx],
+          displaySequence: idx,
         });
       }
     }
 
-    const gift = await prisma.gift.update({
-      where: { id },
-      data: {
-        name,
-        description,
-        sku,
-        imageUrl,
-        mrp: mrp !== undefined ? parseFloat(mrp) : undefined,
-        showMrp,
-        status,
-      },
-      include: { slabMappings: { include: { slab: true } } },
-    });
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (sku !== undefined) updateData.sku = sku;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+    if (mrp !== undefined) updateData.mrp = parseFloat(mrp);
+    if (showMrp !== undefined) updateData.showMrp = showMrp;
+    if (status !== undefined) updateData.status = status;
 
+    await db.collection('gifts').doc(id).update(updateData);
+
+    // Return updated gift with slab mappings
+    const giftSnap = await db.collection('gifts').doc(id).get();
+    const giftData = giftSnap.data() as Record<string, unknown>;
+
+    const mappingsSnap = await db.collection('giftSlabMappings').where('giftId', '==', id).get();
+    const slabMappings = await Promise.all(
+      mappingsSnap.docs.map(async (d) => {
+        const data = d.data() as Record<string, unknown>;
+        const slabSnap = await db.collection('slabs').doc(data.slabId as string).get();
+        return {
+          ...data,
+          slab: slabSnap.exists ? { id: slabSnap.id, ...(slabSnap.data() as Record<string, unknown>) } : null,
+        };
+      }),
+    );
+
+    const gift = { id, ...giftData, slabMappings };
     return NextResponse.json({ gift });
   } catch (err) {
     if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -70,7 +113,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     await requireAdmin(request);
     const { id } = await params;
-    await prisma.gift.update({ where: { id }, data: { status: 'inactive' } });
+    await db.collection('gifts').doc(id).update({ status: 'inactive', updatedAt: new Date() });
     return NextResponse.json({ success: true });
   } catch (err) {
     if ((err as Error).message === 'unauthorized') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
