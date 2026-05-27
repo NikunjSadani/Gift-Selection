@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/firebase-admin';
 import { verifyAdminToken } from '@/lib/auth';
 
 async function requireAdmin(request: NextRequest) {
@@ -17,31 +17,59 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
+    const snap = await db.collection('retailers').get();
+    let retailers = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>;
+
+    // Filter
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { mobile: { contains: search } },
-        { retailerId: { contains: search } },
-      ];
+      const lower = search.toLowerCase();
+      retailers = retailers.filter(
+        (r) =>
+          (r.name as string)?.toLowerCase().includes(lower) ||
+          (r.mobile as string)?.toLowerCase().includes(lower) ||
+          (r.retailerId as string)?.toLowerCase().includes(lower),
+      );
     }
-    if (slabId) where.slabId = slabId;
-    if (status) where.status = status;
+    if (slabId) retailers = retailers.filter((r) => r.slabId === slabId);
+    if (status) retailers = retailers.filter((r) => r.status === status);
 
-    const [retailers, total] = await Promise.all([
-      prisma.retailer.findMany({
-        where,
-        include: { slab: true, submission: { select: { referenceId: true, submittedAt: true } } },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+    // Sort by createdAt desc
+    retailers.sort((a, b) => {
+      const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() :
+        (a.createdAt && typeof (a.createdAt as { toDate?: unknown }).toDate === 'function')
+          ? (a.createdAt as { toDate: () => Date }).toDate().getTime()
+          : 0;
+      const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() :
+        (b.createdAt && typeof (b.createdAt as { toDate?: unknown }).toDate === 'function')
+          ? (b.createdAt as { toDate: () => Date }).toDate().getTime()
+          : 0;
+      return bTime - aTime;
+    });
+
+    const total = retailers.length;
+    const skip = (page - 1) * limit;
+    const paged = retailers.slice(skip, skip + limit);
+
+    // Enrich with slab + submission
+    const enriched = await Promise.all(
+      paged.map(async (r) => {
+        const [slabSnap, subSnap] = await Promise.all([
+          r.slabId ? db.collection('slabs').doc(r.slabId as string).get() : Promise.resolve(null),
+          db.collection('submissions').where('retailerId', '==', r.id).get(),
+        ]);
+        const slab = slabSnap?.exists ? { id: slabSnap.id, ...(slabSnap.data() as Record<string, unknown>) } : null;
+        const submission = subSnap.empty
+          ? null
+          : (() => {
+              const sd = subSnap.docs[0].data() as Record<string, unknown>;
+              return { referenceId: sd.referenceId, submittedAt: sd.submittedAt };
+            })();
+        return { ...r, slab, submission };
       }),
-      prisma.retailer.count({ where }),
-    ]);
+    );
 
-    return NextResponse.json({ retailers, total, page, limit });
+    return NextResponse.json({ retailers: enriched, total, page, limit });
   } catch (err) {
     if ((err as Error).message === 'unauthorized') {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -61,9 +89,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
     }
 
-    const retailer = await prisma.retailer.create({
-      data: { retailerId, name, ownerName, mobile, slabId, ndaCode, addressLine1, addressLine2, city, state, pincode, gstNumber },
-    });
+    const now = new Date();
+    const retailerData = {
+      retailerId,
+      name,
+      ownerName: ownerName || null,
+      mobile,
+      slabId,
+      ndaCode: ndaCode || null,
+      addressLine1: addressLine1 || null,
+      addressLine2: addressLine2 || null,
+      city: city || null,
+      state: state || null,
+      pincode: pincode || null,
+      gstNumber: gstNumber || null,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const ref = await db.collection('retailers').add(retailerData);
+    const retailer = { id: ref.id, ...retailerData };
 
     return NextResponse.json({ retailer }, { status: 201 });
   } catch (err) {

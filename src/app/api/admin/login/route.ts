@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/firebase-admin';
 import { signAdminToken } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
@@ -12,21 +12,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
     }
 
-    const admin = await prisma.admin.findUnique({ where: { email } });
-    if (!admin) {
+    const snap = await db.collection('admins').where('email', '==', email).get();
+    if (snap.empty) {
       return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
     }
+
+    const doc = snap.docs[0];
+    const admin = { id: doc.id, ...(doc.data() as Record<string, unknown>) } as {
+      id: string;
+      email: string;
+      passwordHash: string;
+      name: string;
+      role: string;
+    };
 
     const valid = await bcrypt.compare(password, admin.passwordHash);
     if (!valid) {
       return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
     }
 
-    const token = await signAdminToken(admin.id, admin.email);
+    const token = await signAdminToken(admin.id, admin.email, admin.role);
 
     const response = NextResponse.json({
       success: true,
-      admin: { email: admin.email, name: admin.name },
+      admin: { email: admin.email, name: admin.name, role: admin.role },
     });
 
     response.cookies.set('admin_token', token, {

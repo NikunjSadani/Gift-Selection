@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { findValidOtp, markOtpUsed } from '@/lib/otp-store';
+import { getRetailerByMobile, getSubmissionByRetailerId } from '@/lib/firestore';
 import { signRetailerToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -11,35 +12,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
     }
 
-    const record = await prisma.otpRecord.findFirst({
-      where: {
-        mobile,
-        used: false,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
+    const record = await findValidOtp(mobile);
     if (!record || record.otp !== otp) {
       return NextResponse.json({ error: 'invalid_otp' }, { status: 400 });
     }
 
-    await prisma.otpRecord.update({ where: { id: record.id }, data: { used: true } });
+    await markOtpUsed(record.id);
 
-    const retailer = await prisma.retailer.findUnique({
-      where: { mobile },
-      include: { submission: true },
-    });
-
+    const retailer = await getRetailerByMobile(mobile);
     if (!retailer) {
       return NextResponse.json({ error: 'not_registered' }, { status: 404 });
     }
 
-    const token = await signRetailerToken(retailer.id, mobile);
+    const submission = await getSubmissionByRetailerId(retailer.id);
+    const token      = await signRetailerToken(retailer.id, mobile);
 
     const response = NextResponse.json({
       success: true,
-      hasSubmission: !!retailer.submission,
+      hasSubmission: !!submission,
     });
 
     response.cookies.set('retailer_token', token, {

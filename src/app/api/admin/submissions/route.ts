@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/firebase-admin';
 import { verifyAdminToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -19,47 +19,71 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('dateTo');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
-    if (city) where.city = { contains: city };
-    if (state) where.state = { contains: state };
-    if (giftId) where.giftId = giftId;
-    if (detailsEdited !== null && detailsEdited !== '') where.detailsEdited = detailsEdited === 'true';
-    if (whatsappSent !== null && whatsappSent !== '') where.whatsappSent = whatsappSent === 'true';
+    const snap = await db.collection('submissions').get();
+    let submissions = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>;
+
+    // Filter in memory (submissions are denormalized — no joins needed)
+    if (city) {
+      const lower = city.toLowerCase();
+      submissions = submissions.filter((s) => (s.city as string)?.toLowerCase().includes(lower));
+    }
+    if (state) {
+      const lower = state.toLowerCase();
+      submissions = submissions.filter((s) => (s.state as string)?.toLowerCase().includes(lower));
+    }
+    if (giftId) submissions = submissions.filter((s) => s.giftId === giftId);
+    if (detailsEdited !== null && detailsEdited !== '') {
+      submissions = submissions.filter((s) => s.detailsEdited === (detailsEdited === 'true'));
+    }
+    if (whatsappSent !== null && whatsappSent !== '') {
+      submissions = submissions.filter((s) => s.whatsappSent === (whatsappSent === 'true'));
+    }
+    if (slabId) {
+      // submissions have denormalized slabName; match by slabId requires retailer lookup
+      // We'll fetch the slab name first and filter by slabName
+      const slabSnap = await db.collection('slabs').doc(slabId).get();
+      if (slabSnap.exists) {
+        const slabName = (slabSnap.data() as Record<string, unknown>).name as string;
+        submissions = submissions.filter((s) => s.slabName === slabName);
+      } else {
+        submissions = [];
+      }
+    }
     if (dateFrom || dateTo) {
-      where.submittedAt = {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(dateTo) } : {}),
-      };
+      const from = dateFrom ? new Date(dateFrom).getTime() : null;
+      const to = dateTo ? new Date(dateTo).getTime() : null;
+      submissions = submissions.filter((s) => {
+        const submittedAt = s.submittedAt instanceof Date
+          ? s.submittedAt.getTime()
+          : typeof (s.submittedAt as { toDate?: unknown })?.toDate === 'function'
+            ? (s.submittedAt as { toDate: () => Date }).toDate().getTime()
+            : null;
+        if (submittedAt === null) return false;
+        if (from && submittedAt < from) return false;
+        if (to && submittedAt > to) return false;
+        return true;
+      });
     }
 
-    const retailerWhere: Record<string, unknown> = {};
-    if (slabId) retailerWhere.slabId = slabId;
+    // Sort by submittedAt desc
+    submissions.sort((a, b) => {
+      const aTime = a.submittedAt instanceof Date ? a.submittedAt.getTime() :
+        (a.submittedAt && typeof (a.submittedAt as { toDate?: unknown }).toDate === 'function')
+          ? (a.submittedAt as { toDate: () => Date }).toDate().getTime()
+          : 0;
+      const bTime = b.submittedAt instanceof Date ? b.submittedAt.getTime() :
+        (b.submittedAt && typeof (b.submittedAt as { toDate?: unknown }).toDate === 'function')
+          ? (b.submittedAt as { toDate: () => Date }).toDate().getTime()
+          : 0;
+      return bTime - aTime;
+    });
 
-    const [submissions, total] = await Promise.all([
-      prisma.submission.findMany({
-        where: {
-          ...where,
-          ...(slabId ? { retailer: { slabId } } : {}),
-        },
-        include: {
-          retailer: { include: { slab: true } },
-          gift: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { submittedAt: 'desc' },
-      }),
-      prisma.submission.count({
-        where: {
-          ...where,
-          ...(slabId ? { retailer: { slabId } } : {}),
-        },
-      }),
-    ]);
+    const total = submissions.length;
+    const skip = (page - 1) * limit;
+    const paged = submissions.slice(skip, skip + limit);
 
-    return NextResponse.json({ submissions, total, page, limit });
+    return NextResponse.json({ submissions: paged, total, page, limit });
   } catch (err) {
     console.error('[admin/submissions GET]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
