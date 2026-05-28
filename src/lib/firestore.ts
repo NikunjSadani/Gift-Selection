@@ -217,13 +217,13 @@ export async function getGiftsForSlab(slabId: string): Promise<Gift[]> {
     .map((d) => d.data() as { giftId: string; displaySequence: number })
     .sort((a, b) => a.displaySequence - b.displaySequence);
 
-  const gifts: Gift[] = [];
-  for (const mapping of mappings) {
-    const giftSnap = await db.collection('gifts').doc(mapping.giftId).get();
-    if (giftSnap.exists) {
-      gifts.push(docToGift(giftSnap.id, giftSnap.data() as Record<string, unknown>));
-    }
-  }
+  // Fetch all gift documents in parallel instead of sequentially
+  const giftSnaps = await Promise.all(
+    mappings.map((m) => db.collection('gifts').doc(m.giftId).get()),
+  );
+  const gifts: Gift[] = giftSnaps
+    .filter((snap) => snap.exists)
+    .map((snap) => docToGift(snap.id, snap.data() as Record<string, unknown>));
   return gifts;
 }
 

@@ -42,16 +42,14 @@ export async function PATCH(request: NextRequest) {
 
     // Validate the new gift belongs to this retailer's slab
     const slabGifts = await getGiftsForSlab(retailer.slabId);
-    const validIds = slabGifts.map((g) => g.id);
-    if (!validIds.includes(giftId)) {
+    const validGift = slabGifts.find((g) => g.id === giftId);
+    if (!validGift) {
       return NextResponse.json({ error: 'invalid_gift' }, { status: 400 });
     }
 
-    // Fetch gift details for denormalization
-    const giftDoc = await db.collection('gifts').doc(giftId).get();
-    const giftData = giftDoc.exists ? (giftDoc.data() as Record<string, unknown>) : null;
-    const giftName = giftData ? (giftData.name as string) : '';
-    const giftImageUrl = giftData ? ((giftData.imageUrl as string | null) ?? null) : null;
+    // validGift already contains name and imageUrl from the slab validation above
+    const giftName = validGift.name;
+    const giftImageUrl = validGift.imageUrl;
 
     await db.collection('submissions').doc(submission.id).update({
       giftId,
@@ -123,14 +121,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'invalid_gift' }, { status: 400 });
     }
 
-    // Fetch gift details for denormalization
-    const giftDoc = await db.collection('gifts').doc(giftId).get();
-    if (!giftDoc.exists) {
-      return NextResponse.json({ error: 'invalid_gift' }, { status: 400 });
-    }
-    const giftData = giftDoc.data() as Record<string, unknown>;
-    const giftName = giftData.name as string;
-    const giftImageUrl = (giftData.imageUrl as string | null) ?? null;
+    // validGift already contains name and imageUrl from the slab validation above
+    const giftName = validGift.name;
+    const giftImageUrl = validGift.imageUrl;
 
     // Generate referenceId using atomic counter (O(1), no race condition)
     const submissionNumber = await getNextSubmissionNumber();
