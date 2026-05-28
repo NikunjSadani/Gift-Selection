@@ -25,18 +25,18 @@ env:
     availability:
       - RUNTIME
 
-  - variable: MSG91_API_KEY
-    secret: MSG91_API_KEY
-    availability:
-      - RUNTIME
-
-  - variable: MSG91_SENDER_ID
-    secret: MSG91_SENDER_ID
+  - variable: MSG91_AUTH_KEY
+    secret: MSG91_AUTH_KEY
     availability:
       - RUNTIME
 
   - variable: MSG91_TEMPLATE_ID
     secret: MSG91_TEMPLATE_ID
+    availability:
+      - RUNTIME
+
+  - variable: MSG91_WHATSAPP_TEMPLATE
+    secret: MSG91_WHATSAPP_TEMPLATE
     availability:
       - RUNTIME
 
