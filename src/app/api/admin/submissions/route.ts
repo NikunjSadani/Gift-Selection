@@ -83,7 +83,49 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
     const paged = submissions.slice(skip, skip + limit);
 
-    return NextResponse.json({ submissions: paged, total, page, limit });
+    // Batch-fetch retailer docs for this page so we can include human-readable fields
+    const retailerIds = [...new Set(paged.map((s) => s.retailerId as string).filter(Boolean))];
+    const retailerMap: Record<string, Record<string, unknown>> = {};
+    if (retailerIds.length > 0) {
+      const retailerSnaps = await Promise.all(
+        retailerIds.map((id) => db.collection('retailers').doc(id).get()),
+      );
+      retailerSnaps.forEach((snap) => {
+        if (snap.exists) retailerMap[snap.id] = snap.data() as Record<string, unknown>;
+      });
+    }
+
+    // Reshape: add nested `retailer` and `gift` objects expected by the UI
+    const shaped = paged.map((s) => {
+      const r = retailerMap[s.retailerId as string] ?? {};
+      return {
+        ...s,
+        submittedAt: s.submittedAt instanceof Date
+          ? s.submittedAt.toISOString()
+          : typeof (s.submittedAt as { toDate?: unknown })?.toDate === 'function'
+            ? (s.submittedAt as { toDate: () => Date }).toDate().toISOString()
+            : s.submittedAt,
+        whatsappSentAt: s.whatsappSentAt instanceof Date
+          ? s.whatsappSentAt.toISOString()
+          : typeof (s.whatsappSentAt as { toDate?: unknown })?.toDate === 'function'
+            ? (s.whatsappSentAt as { toDate: () => Date }).toDate().toISOString()
+            : s.whatsappSentAt,
+        gift: {
+          id: s.giftId as string,
+          name: s.giftName as string,
+        },
+        retailer: {
+          retailerId: (r.retailerId as string) ?? (s.retailerId as string),
+          mobile: (s.retailerMobile as string) ?? (r.mobile as string) ?? '',
+          ownerName: (r.ownerName as string | null) ?? null,
+          cso: (r.cso as string | null) ?? null,
+          csoPhone: (r.csoPhone as string | null) ?? null,
+          slab: { name: (s.slabName as string) ?? '' },
+        },
+      };
+    });
+
+    return NextResponse.json({ submissions: shaped, total, page, limit });
   } catch (err) {
     console.error('[admin/submissions GET]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
