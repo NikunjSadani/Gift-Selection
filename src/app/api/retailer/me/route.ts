@@ -27,11 +27,23 @@ export async function GET(request: NextRequest) {
       getSlabById(retailer.slabId),
     ]);
 
+    // Reshape submission: confirmation page expects a nested `gift` object
+    const reshapedSubmission = submission
+      ? {
+          ...submission,
+          gift: {
+            id: submission.giftId as string,
+            name: submission.giftName as string,
+            imageUrl: (submission.giftImageUrl as string | null) ?? null,
+          },
+        }
+      : null;
+
     return NextResponse.json({
       retailer: {
         ...retailer,
         slab,
-        submission,
+        submission: reshapedSubmission,
         draft,
       },
     });
