@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import logo from '../../../public/kwality-walls-logo.png'
 
 export default function RetailerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -8,7 +9,7 @@ export default function RetailerLayout({ children }: { children: React.ReactNode
           {/* Logo on white pill */}
           <div className="bg-white rounded-xl px-3 py-1.5 shadow-sm flex-shrink-0">
             <Image
-              src="/kwality-walls-logo.png"
+              src={logo}
               alt="Kwality Wall's"
               width={110}
               height={44}
