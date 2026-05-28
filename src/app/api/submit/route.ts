@@ -6,8 +6,7 @@ import {
   getSubmissionByRetailerId,
   getDraftByRetailerId,
   getGiftsForSlab,
-  getSubmissionCount,
-  getSlabById,
+  getNextSubmissionNumber,
 } from '@/lib/firestore';
 import { db } from '@/lib/firebase-admin';
 
@@ -133,10 +132,10 @@ export async function POST(request: NextRequest) {
     const giftName = giftData.name as string;
     const giftImageUrl = (giftData.imageUrl as string | null) ?? null;
 
-    // Generate referenceId
-    const count = await getSubmissionCount();
+    // Generate referenceId using atomic counter (O(1), no race condition)
+    const submissionNumber = await getNextSubmissionNumber();
     const year = new Date().getFullYear();
-    const referenceId = `KW-${year}-${String(count + 1).padStart(5, '0')}`;
+    const referenceId = `KW-${year}-${String(submissionNumber).padStart(5, '0')}`;
 
     const submittedAt = new Date();
 

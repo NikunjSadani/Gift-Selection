@@ -302,9 +302,33 @@ export async function getSlabById(id: string): Promise<Slab | null> {
   };
 }
 
-// ── Count helpers (for reference ID generation + dashboard) ───────────────────
+// ── Counter helpers ────────────────────────────────────────────────────────────
 
-export async function getSubmissionCount(): Promise<number> {
-  const snap = await db.collection('submissions').get();
-  return snap.size;
+/**
+ * Atomically increments the submissions counter and returns the new value.
+ * Uses a single counter document instead of scanning the entire collection,
+ * making reference ID generation O(1) regardless of submission volume.
+ * Also eliminates the race condition where two concurrent submissions could
+ * receive the same reference ID.
+ *
+ * On first call (counter document absent) it seeds itself from the real
+ * collection size so existing reference IDs are never duplicated.
+ */
+export async function getNextSubmissionNumber(): Promise<number> {
+  const counterRef = db.collection('counters').doc('submissions');
+  let newCount = 1;
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(counterRef);
+    if (snap.exists) {
+      newCount = (snap.data()!.count as number) + 1;
+    } else {
+      // First ever call — seed from actual collection size so we never reuse a number
+      const existing = await db.collection('submissions').get();
+      newCount = existing.size + 1;
+    }
+    tx.set(counterRef, { count: newCount }, { merge: true });
+  });
+
+  return newCount;
 }
