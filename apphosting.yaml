@@ -31,12 +31,12 @@ env:
       - RUNTIME
 
   - variable: MSG91_TEMPLATE_ID
-    secret: MSG91_TEMPLATE_ID
+    value: 699d295ba29962881e09d062
     availability:
       - RUNTIME
 
   - variable: MSG91_WHATSAPP_TEMPLATE
-    secret: MSG91_WHATSAPP_TEMPLATE
+    value: ""
     availability:
       - RUNTIME
 
