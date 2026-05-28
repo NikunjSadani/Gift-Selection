@@ -7,6 +7,7 @@ import {
   getDraftByRetailerId,
   getGiftsForSlab,
   getSubmissionCount,
+  getSlabById,
 } from '@/lib/firestore';
 import { db } from '@/lib/firebase-admin';
 
@@ -114,6 +115,13 @@ export async function POST(request: NextRequest) {
 
     if (!giftId || !storeName || !addressLine1 || !city || !state || !pincode) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
+    }
+
+    // Validate the gift belongs to this retailer's slab
+    const slabGifts = await getGiftsForSlab(retailer.slabId);
+    const validGift = slabGifts.find((g) => g.id === giftId);
+    if (!validGift) {
+      return NextResponse.json({ error: 'invalid_gift' }, { status: 400 });
     }
 
     // Fetch gift details for denormalization

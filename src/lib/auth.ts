@@ -23,7 +23,7 @@ export async function signRetailerToken(retailerId: string, mobile: string): Pro
   return await new SignJWT({ retailerId, mobile })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('60m')
+    .setExpirationTime('150h')
     .sign(JWT_SECRET);
 }
 

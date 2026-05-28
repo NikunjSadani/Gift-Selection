@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('retailer_token', token, {
       httpOnly: true,
-      maxAge: 60 * 60,
+      maxAge: 150 * 60 * 60,
       path: '/',
       sameSite: 'lax',
     });
