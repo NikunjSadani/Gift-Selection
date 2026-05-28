@@ -26,28 +26,33 @@ export async function createOtpRecord(
 
 /** Find the most recent valid (unused, not expired) OTP for a mobile number */
 export async function findValidOtp(mobile: string): Promise<OtpRecord | null> {
+  // Use a single-field query to avoid requiring a composite Firestore index;
+  // filter 'used' and 'expiresAt' in memory.
   const snap = await db
     .collection('otpRecords')
     .where('mobile', '==', mobile)
-    .where('used', '==', false)
-    .where('expiresAt', '>', new Date())
-    .orderBy('expiresAt', 'desc')
-    .limit(1)
     .get();
 
-  if (snap.empty) return null;
+  const now = new Date();
+  const valid = snap.docs
+    .map((doc) => {
+      const data = doc.data();
+      const expiresAt =
+        data.expiresAt instanceof Date
+          ? data.expiresAt
+          : (data.expiresAt as { toDate: () => Date }).toDate();
+      return {
+        id:        doc.id,
+        mobile:    data.mobile as string,
+        otp:       data.otp as string,
+        expiresAt,
+        used:      data.used as boolean,
+      };
+    })
+    .filter((r) => !r.used && r.expiresAt > now)
+    .sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime());
 
-  const doc = snap.docs[0];
-  const data = doc.data();
-  return {
-    id:        doc.id,
-    mobile:    data.mobile as string,
-    otp:       data.otp as string,
-    expiresAt: data.expiresAt instanceof Date
-      ? data.expiresAt
-      : (data.expiresAt as { toDate: () => Date }).toDate(),
-    used:      data.used as boolean,
-  };
+  return valid.length > 0 ? valid[0] : null;
 }
 
 /** Mark an OTP record as used so it cannot be replayed */
