@@ -36,7 +36,7 @@ env:
       - RUNTIME
 
   - variable: MSG91_WHATSAPP_TEMPLATE
-    value: ""
+    value: kwality_selection1
     availability:
       - RUNTIME
 

@@ -167,12 +167,7 @@ export async function POST(request: NextRequest) {
     await db.collection('drafts').doc(retailerId).delete();
 
     // Send WhatsApp async
-    const dateStr = new Date().toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-    sendWhatsappConfirmation(retailer.mobile, storeName, giftName, referenceId, dateStr)
+    sendWhatsappConfirmation(retailer.mobile, storeName, giftName)
       .then(async () => {
         await db.collection('submissions').doc(submissionRef.id).update({
           whatsappSent: true,

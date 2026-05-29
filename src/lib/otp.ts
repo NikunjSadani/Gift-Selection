@@ -32,12 +32,10 @@ export async function sendWhatsappConfirmation(
   mobile: string,
   name: string,
   giftName: string,
-  referenceId: string,
-  dateStr: string
 ): Promise<void> {
   if (!process.env.MSG91_AUTH_KEY || !process.env.MSG91_WHATSAPP_TEMPLATE) {
     console.log(
-      `[DEV WhatsApp] Mobile: ${mobile} | Name: ${name} | Gift: ${giftName} | Ref: ${referenceId} | Date: ${dateStr}`
+      `[DEV WhatsApp] Mobile: ${mobile} | Name: ${name} | Gift: ${giftName}`
     );
     return;
   }
@@ -62,10 +60,8 @@ export async function sendWhatsappConfirmation(
               {
                 type: 'body',
                 parameters: [
-                  { type: 'text', text: name },
-                  { type: 'text', text: giftName },
-                  { type: 'text', text: referenceId },
-                  { type: 'text', text: dateStr },
+                  { type: 'text', text: name },    // {{1}} — recipient name
+                  { type: 'text', text: giftName }, // {{2}} — gift selected
                 ],
               },
             ],
