@@ -8,7 +8,8 @@ function initAdmin(): App {
   const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!key) throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY is not set');
 
-  const serviceAccount = JSON.parse(key);
+  // Strip UTF-8 BOM if present (Windows tools sometimes add ﻿)
+  const serviceAccount = JSON.parse(key.replace(/^﻿/, ''));
 
   return initializeApp({
     credential: cert(serviceAccount),
