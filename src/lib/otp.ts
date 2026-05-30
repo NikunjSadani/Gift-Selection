@@ -3,7 +3,8 @@ export function generateOtp(): string {
 }
 
 export async function sendOtp(mobile: string, otp: string): Promise<void> {
-  if (!process.env.MSG91_AUTH_KEY) {
+  const authKey = process.env.MSG91_AUTH_KEY?.trim();
+  if (!authKey) {
     console.log(`[DEV OTP] Mobile: ${mobile} | OTP: ${otp}`);
     return;
   }
@@ -13,7 +14,7 @@ export async function sendOtp(mobile: string, otp: string): Promise<void> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        authkey: process.env.MSG91_AUTH_KEY,
+        authkey: authKey,
       },
       body: JSON.stringify({
         template_id: process.env.MSG91_TEMPLATE_ID,
