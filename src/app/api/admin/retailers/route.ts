@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin(request);
     const body = await request.json();
-    const { retailerId, name, ownerName, mobile, slabId, ndaCode, addressLine1, addressLine2, city, state, pincode, gstNumber } = body;
+    const { retailerId, name, ownerName, mobile, slabId, ndaCode, addressLine1, addressLine2, city, state, pincode, landmark, cso, csoPhone, gstNumber } = body;
 
     if (!retailerId || !name || !mobile || !slabId) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
@@ -102,6 +102,9 @@ export async function POST(request: NextRequest) {
       city: city || null,
       state: state || null,
       pincode: pincode || null,
+      landmark: landmark || null,
+      cso: cso || null,
+      csoPhone: csoPhone || null,
       gstNumber: gstNumber || null,
       status: 'active',
       createdAt: now,

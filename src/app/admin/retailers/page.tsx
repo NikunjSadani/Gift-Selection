@@ -34,7 +34,11 @@ export default function RetailersPage() {
   const [slabFilter, setSlabFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ retailerId: '', name: '', ownerName: '', mobile: '', slabId: '' });
+  const [form, setForm] = useState({
+    retailerId: '', name: '', ownerName: '', mobile: '',
+    addressLine1: '', addressLine2: '', state: '', city: '', pincode: '',
+    landmark: '', cso: '', csoPhone: '', slabId: '',
+  });
   const [saving, setSaving] = useState(false);
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState<Retailer | null>(null);
   const [hardDeleting, setHardDeleting] = useState(false);
@@ -101,7 +105,11 @@ export default function RetailersPage() {
       if (!res.ok) throw new Error('Failed');
       toast.success('Retailer created');
       setShowModal(false);
-      setForm({ retailerId: '', name: '', ownerName: '', mobile: '', slabId: '' });
+      setForm({
+        retailerId: '', name: '', ownerName: '', mobile: '',
+        addressLine1: '', addressLine2: '', state: '', city: '', pincode: '',
+        landmark: '', cso: '', csoPhone: '', slabId: '',
+      });
       fetchRetailers();
     } catch {
       toast.error('Failed to create retailer');
@@ -502,12 +510,13 @@ export default function RetailersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Add Retailer</h3>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              {/* Required fields */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">Required</p>
               {[
-                { field: 'retailerId', label: 'Retailer ID *', type: 'text' },
-                { field: 'name', label: 'Store Name *', type: 'text' },
-                { field: 'ownerName', label: 'Owner Name', type: 'text' },
-                { field: 'mobile', label: 'Mobile *', type: 'tel' },
+                { field: 'retailerId',  label: 'Retailer ID *',  type: 'text' },
+                { field: 'name',        label: 'Store Name *',   type: 'text' },
+                { field: 'mobile',      label: 'Phone Number *', type: 'tel'  },
               ].map(({ field, label, type }) => (
                 <div key={field}>
                   <label className="block text-sm text-gray-600 mb-1">{label}</label>
@@ -520,7 +529,7 @@ export default function RetailersPage() {
                 </div>
               ))}
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Slab *</label>
+                <label className="block text-sm text-gray-600 mb-1">Slab Winner *</label>
                 <select
                   value={form.slabId}
                   onChange={(e) => setForm({ ...form, slabId: e.target.value })}
@@ -530,6 +539,30 @@ export default function RetailersPage() {
                   {slabs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
+
+              {/* Optional fields */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2">Optional</p>
+              {[
+                { field: 'ownerName',    label: 'Owner Name',       type: 'text' },
+                { field: 'addressLine1', label: 'Address Line 1',   type: 'text' },
+                { field: 'addressLine2', label: 'Address Line 2',   type: 'text' },
+                { field: 'landmark',     label: 'Landmark',         type: 'text' },
+                { field: 'city',         label: 'City',             type: 'text' },
+                { field: 'state',        label: 'State',            type: 'text' },
+                { field: 'pincode',      label: 'Pin Code',         type: 'text' },
+                { field: 'cso',          label: 'CSO',              type: 'text' },
+                { field: 'csoPhone',     label: 'CSO Phone Number', type: 'tel'  },
+              ].map(({ field, label, type }) => (
+                <div key={field}>
+                  <label className="block text-sm text-gray-600 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={form[field as keyof typeof form]}
+                    onChange={(e) => setForm({ ...form, [field]: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#E3000F]"
+                  />
+                </div>
+              ))}
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-200 py-2.5 rounded-xl text-sm text-gray-600">Cancel</button>
