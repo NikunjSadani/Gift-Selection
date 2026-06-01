@@ -170,6 +170,11 @@ export default function SubmissionsPage() {
       const data = await res.json();
       const all: Submission[] = data.submissions || [];
       const baseUrl = window.location.origin;
+      // documentUrl may be a full https:// URL (Firebase Storage) or a legacy /uploads/… path
+      const resolveDocUrl = (url: string | null | undefined) => {
+        if (!url) return '';
+        return url.startsWith('http') ? url : `${baseUrl}${url}`;
+      };
 
       const rows = all.map((s) => ({
         'Reference ID':       s.referenceId,
@@ -189,7 +194,7 @@ export default function SubmissionsPage() {
         'Landmark':           s.landmark || '',
         'Address Edited':     s.detailsEdited ? 'Yes' : 'No',
         'Document Type':      s.documentType || '',
-        'Document Link':      s.documentUrl ? `${baseUrl}${s.documentUrl}` : '',
+        'Document Link':      resolveDocUrl(s.documentUrl),
         'Submitted At':       new Date(s.submittedAt).toLocaleString('en-IN'),
         'WhatsApp Sent':      s.whatsappSent ? 'Yes' : 'No',
         'WhatsApp Sent At':   s.whatsappSentAt ? new Date(s.whatsappSentAt).toLocaleString('en-IN') : '',

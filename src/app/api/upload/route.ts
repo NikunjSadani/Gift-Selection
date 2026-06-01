@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyRetailerToken } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { storage } from '@/lib/firebase-admin';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
 const MAX_SIZE_MB = 5;
@@ -31,17 +30,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'file_too_large', maxMb: MAX_SIZE_MB }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const ext = file.name.split('.').pop() || 'bin';
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const storagePath = `uploads/${filename}`;
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, filename), buffer);
+    const bucket = storage.bucket();
+    const storageFile = bucket.file(storagePath);
+    await storageFile.save(buffer, {
+      contentType: file.type,
+      metadata: { cacheControl: 'public, max-age=31536000' },
+    });
+    await storageFile.makePublic();
 
-    return NextResponse.json({ url: `/uploads/${filename}` });
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    return NextResponse.json({ url: publicUrl });
   } catch (err) {
     console.error('[upload]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

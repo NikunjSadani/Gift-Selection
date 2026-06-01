@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { storage } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,13 +21,20 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const ext = file.name.split('.').pop() || 'jpg';
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const filename = `gift-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'gifts');
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, filename), buffer);
+    const storagePath = `gifts/${filename}`;
 
-    return NextResponse.json({ url: `/gifts/${filename}` });
+    const bucket = storage.bucket();
+    const storageFile = bucket.file(storagePath);
+    await storageFile.save(buffer, {
+      contentType: file.type,
+      metadata: { cacheControl: 'public, max-age=31536000' },
+    });
+    await storageFile.makePublic();
+
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    return NextResponse.json({ url: publicUrl });
   } catch (err) {
     console.error('[admin-upload]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
