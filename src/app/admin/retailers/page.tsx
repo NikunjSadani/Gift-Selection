@@ -9,8 +9,16 @@ interface Retailer {
   id: string;
   retailerId: string;
   name: string;
+  ownerName?: string | null;
   mobile: string;
+  slabId?: string;
   status: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  landmark?: string | null;
   cso: string | null;
   csoPhone: string | null;
   slab: { name: string };
@@ -42,6 +50,13 @@ export default function RetailersPage() {
   const [saving, setSaving] = useState(false);
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState<Retailer | null>(null);
   const [hardDeleting, setHardDeleting] = useState(false);
+  const [editRetailer, setEditRetailer] = useState<Retailer | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '', ownerName: '', mobile: '',
+    addressLine1: '', addressLine2: '', state: '', city: '', pincode: '',
+    landmark: '', cso: '', csoPhone: '', slabId: '',
+  });
+  const [editSaving, setEditSaving] = useState(false);
   const [uploadSummary, setUploadSummary] = useState<{
     imported: number;
     skipped: number;
@@ -160,6 +175,52 @@ export default function RetailersPage() {
       toast.error('Failed to hard-delete retailer');
     } finally {
       setHardDeleting(false);
+    }
+  };
+
+  const openEdit = (r: Retailer) => {
+    setEditRetailer(r);
+    setEditForm({
+      name:         r.name         ?? '',
+      ownerName:    r.ownerName    ?? '',
+      mobile:       r.mobile       ?? '',
+      addressLine1: r.addressLine1 ?? '',
+      addressLine2: r.addressLine2 ?? '',
+      state:        r.state        ?? '',
+      city:         r.city         ?? '',
+      pincode:      r.pincode      ?? '',
+      landmark:     r.landmark     ?? '',
+      cso:          r.cso          ?? '',
+      csoPhone:     r.csoPhone     ?? '',
+      slabId:       r.slabId       ?? '',
+    });
+  };
+
+  const handleEdit = async () => {
+    if (!editRetailer) return;
+    if (!editForm.name || !editForm.mobile || !editForm.slabId) {
+      toast.error('Store Name, Phone Number and Slab are required');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/admin/retailers/${editRetailer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Failed');
+      }
+      toast.success('Retailer updated');
+      setEditRetailer(null);
+      fetchRetailers();
+    } catch (err) {
+      toast.error(`Failed to update: ${(err as Error).message}`);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -432,6 +493,7 @@ export default function RetailersPage() {
                   <td className="px-4 py-3">
                     {isSuperAdmin ? (
                       <div className="flex gap-2 flex-wrap">
+                        <button onClick={() => openEdit(r)} className="text-xs text-blue-600 hover:underline font-medium">✏ Edit</button>
                         {r.status === 'active' ? (
                           <button onClick={() => handleStatusChange(r.id, 'inactive')} className="text-xs text-amber-600 hover:underline">Deactivate</button>
                         ) : r.status === 'inactive' ? (
@@ -499,6 +561,82 @@ export default function RetailersPage() {
               <button onClick={handleHardDelete} disabled={hardDeleting}
                 className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-60">
                 {hardDeleting ? 'Deleting…' : 'Yes, Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Retailer Modal ── */}
+      {editRetailer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-gray-800 mb-1">Edit Retailer</h3>
+            <p className="text-xs text-gray-400 mb-4">ID: {editRetailer.retailerId}</p>
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">Required</p>
+              {[
+                { field: 'name',   label: 'Store Name *',   type: 'text' },
+                { field: 'mobile', label: 'Phone Number *', type: 'tel'  },
+              ].map(({ field, label, type }) => (
+                <div key={field}>
+                  <label className="block text-sm text-gray-600 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={editForm[field as keyof typeof editForm]}
+                    onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#E3000F]"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Slab Winner *</label>
+                <select
+                  value={editForm.slabId}
+                  onChange={(e) => setEditForm({ ...editForm, slabId: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#E3000F]"
+                >
+                  <option value="">Select slab</option>
+                  {slabs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2">Optional</p>
+              {[
+                { field: 'ownerName',    label: 'Owner Name',       type: 'text' },
+                { field: 'addressLine1', label: 'Address Line 1',   type: 'text' },
+                { field: 'addressLine2', label: 'Address Line 2',   type: 'text' },
+                { field: 'landmark',     label: 'Landmark',         type: 'text' },
+                { field: 'city',         label: 'City',             type: 'text' },
+                { field: 'state',        label: 'State',            type: 'text' },
+                { field: 'pincode',      label: 'Pin Code',         type: 'text' },
+                { field: 'cso',          label: 'CSO',              type: 'text' },
+                { field: 'csoPhone',     label: 'CSO Phone Number', type: 'tel'  },
+              ].map(({ field, label, type }) => (
+                <div key={field}>
+                  <label className="block text-sm text-gray-600 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={editForm[field as keyof typeof editForm]}
+                    onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#E3000F]"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setEditRetailer(null)}
+                className="flex-1 border border-gray-200 py-2.5 rounded-xl text-sm text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEdit}
+                disabled={editSaving}
+                className="flex-1 bg-[#E3000F] text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                {editSaving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
           </div>

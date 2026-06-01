@@ -59,6 +59,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.city !== undefined) updateData.city = body.city;
     if (body.state !== undefined) updateData.state = body.state;
     if (body.pincode !== undefined) updateData.pincode = body.pincode;
+    if (body.landmark !== undefined) updateData.landmark = body.landmark;
+    if (body.cso !== undefined) updateData.cso = body.cso;
+    if (body.csoPhone !== undefined) updateData.csoPhone = body.csoPhone;
     if (body.gstNumber !== undefined) updateData.gstNumber = body.gstNumber;
     if (body.status !== undefined) updateData.status = body.status;
 
