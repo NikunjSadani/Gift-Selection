@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { verifyAdminToken } from '@/lib/auth';
 
+/** Safely convert a Firestore Timestamp, JS Date, or ISO string to an ISO string. Returns null if falsy. */
+function toISO(val: unknown): string | null {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString();
+  if (typeof (val as { toDate?: unknown }).toDate === 'function')
+    return (val as { toDate: () => Date }).toDate().toISOString();
+  if (typeof val === 'string') return val;
+  return null;
+}
+
 async function requireAdmin(request: NextRequest) {
   const token = request.cookies.get('admin_token')?.value;
   if (!token) throw new Error('unauthorized');
@@ -81,9 +91,9 @@ export async function GET(request: NextRequest) {
           giftId,
           giftSelected: giftId ? (giftMap.get(giftId) ?? 'Unknown') : '—',
           giftConfirmed: d.giftConfirmed,
-          giftSelectedAt: d.giftSelectedAt,
+          giftSelectedAt: toISO(d.giftSelectedAt),
           step: d.step,
-          lastActivity: d.updatedAt,
+          lastActivity: toISO(d.updatedAt),
         };
       }),
     );
