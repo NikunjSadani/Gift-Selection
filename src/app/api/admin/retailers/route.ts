@@ -89,6 +89,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
     }
 
+    // Enforce retailer ID uniqueness
+    const existing = await db.collection('retailers').where('retailerId', '==', retailerId).get();
+    if (!existing.empty) {
+      return NextResponse.json({ error: 'duplicate_retailer_id', message: `Retailer ID "${retailerId}" already exists` }, { status: 409 });
+    }
+
     const now = new Date();
     const retailerData = {
       retailerId,

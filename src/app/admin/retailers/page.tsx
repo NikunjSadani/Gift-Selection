@@ -117,7 +117,10 @@ export default function RetailersPage() {
         credentials: 'include',
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.message || 'Failed to create retailer');
+      }
       toast.success('Retailer created');
       setShowModal(false);
       setForm({
