@@ -9,17 +9,45 @@ const COL: Record<string, string> = {
   'retailer id': 'retailerId',
   'retailerid': 'retailerId',
   'retailer_id': 'retailerId',
+  'retailer code': 'retailerId',
+  'party code': 'retailerId',
+  'party id': 'retailerId',
+  'dealer code': 'retailerId',
+  'dealer id': 'retailerId',
+  'customer code': 'retailerId',
+  'customer id': 'retailerId',
+  'outlet code': 'retailerId',
+  'outlet id': 'retailerId',
+  'shop code': 'retailerId',
+  'code': 'retailerId',
+  'sr no': 'retailerId',
+  'sr. no': 'retailerId',
+  'sr.no': 'retailerId',
+  'serial no': 'retailerId',
+  'serial number': 'retailerId',
+  's.no': 'retailerId',
+  'sno': 'retailerId',
 
   // Retailer Name
   'retailer name': 'name',
   'retailername': 'name',
   'name': 'name',
   'store name': 'name',
+  'shop name': 'name',
+  'outlet name': 'name',
+  'firm name': 'name',
+  'business name': 'name',
+  'party name': 'name',
+  'dealer name': 'name',
+  'customer name': 'name',
 
   // Owner Name
   'owner name': 'ownerName',
   'ownername': 'ownerName',
   'owner': 'ownerName',
+  'proprietor': 'ownerName',
+  'contact person': 'ownerName',
+  'contact name': 'ownerName',
 
   // Phone / Mobile
   'phone number': 'mobile',
@@ -27,36 +55,83 @@ const COL: Record<string, string> = {
   'phone': 'mobile',
   'mobile': 'mobile',
   'mobile number': 'mobile',
+  'mobile no': 'mobile',
+  'phone no': 'mobile',
+  'contact no': 'mobile',
+  'contact number': 'mobile',
+  'whatsapp': 'mobile',
+  'whatsapp no': 'mobile',
+  'whatsapp number': 'mobile',
+  'mob': 'mobile',
+  'mob no': 'mobile',
 
   // Address
   'address line 1': 'addressLine1',
   'addressline1': 'addressLine1',
   'address1': 'addressLine1',
+  'address': 'addressLine1',
   'address line 2': 'addressLine2',
   'addressline2': 'addressLine2',
   'address2': 'addressLine2',
+  'address 1': 'addressLine1',
+  'address 2': 'addressLine2',
 
   // Location
   'state': 'state',
   'city': 'city',
+  'town': 'city',
+  'district': 'city',
+  'area': 'city',
   'pin code': 'pincode',
   'pincode': 'pincode',
   'pin': 'pincode',
   'postal code': 'pincode',
+  'zip': 'pincode',
+  'zip code': 'pincode',
+  'pin no': 'pincode',
   'landmark': 'landmark',
+  'beat': 'landmark',
+  'beat name': 'landmark',
+  'route': 'landmark',
+  'zone': 'landmark',
+  'territory': 'landmark',
 
-  // CSO
+  // CSO / Sales Executive
   'cso': 'cso',
   'cso name': 'cso',
+  'cse': 'cso',
+  'cse name': 'cso',
+  'tse': 'cso',
+  'tse name': 'cso',
+  'ase': 'cso',
+  'ase name': 'cso',
+  'se': 'cso',
+  'se name': 'cso',
+  'sales executive': 'cso',
+  'sales person': 'cso',
+  'salesman': 'cso',
+  'salesman name': 'cso',
+  'executive': 'cso',
+  'executive name': 'cso',
   'cso phone number': 'csoPhone',
   'cso phone': 'csoPhone',
   'csophone': 'csoPhone',
+  'cse phone': 'csoPhone',
+  'tse phone': 'csoPhone',
+  'executive phone': 'csoPhone',
+  'executive mobile': 'csoPhone',
 
   // Slab
   'slab winner': 'slabId',
   'slab': 'slabId',
   'slabid': 'slabId',
   'tier': 'slabId',
+  'gift slab': 'slabId',
+  'gift tier': 'slabId',
+  'scheme': 'slabId',
+  'category': 'slabId',
+  'class': 'slabId',
+  'segment': 'slabId',
 };
 
 function normaliseRow(raw: Record<string, unknown>): Record<string, string> {
@@ -69,6 +144,18 @@ function normaliseRow(raw: Record<string, unknown>): Record<string, string> {
   return out;
 }
 
+/** Returns columns present in the file that could not be mapped to any known key */
+function findUnrecognisedColumns(rawRows: Record<string, unknown>[]): string[] {
+  if (rawRows.length === 0) return [];
+  const seen = new Set<string>();
+  for (const row of rawRows) {
+    for (const key of Object.keys(row)) {
+      seen.add(key.trim());
+    }
+  }
+  return Array.from(seen).filter((k) => !COL[k.toLowerCase()]);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
@@ -77,6 +164,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const rawRows: Record<string, unknown>[] = body.rows || [];
+
+    // Report any column headers from the file that we don't recognise
+    const unrecognisedColumns = findUnrecognisedColumns(rawRows);
+
+    // Report which internal keys were successfully mapped from the file
+    const detectedColumns = rawRows.length > 0
+      ? Array.from(new Set(Object.keys(rawRows[0]).map((k) => COL[k.trim().toLowerCase()]).filter(Boolean)))
+      : [];
 
     // Cache slabs once — avoids a DB query per row
     const allSlabs = await getAllSlabs();
@@ -226,7 +321,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ imported, skipped, failed, rowResults });
+    return NextResponse.json({ imported, skipped, failed, rowResults, unrecognisedColumns, detectedColumns });
   } catch (err) {
     console.error('[admin/retailers/bulk]', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

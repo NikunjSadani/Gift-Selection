@@ -38,7 +38,14 @@ export default function RetailersPage() {
   const [saving, setSaving] = useState(false);
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState<Retailer | null>(null);
   const [hardDeleting, setHardDeleting] = useState(false);
-  const [uploadSummary, setUploadSummary] = useState<{ imported: number; skipped: number; failed: number; reportRows: Record<string, unknown>[] } | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<{
+    imported: number;
+    skipped: number;
+    failed: number;
+    reportRows: Record<string, unknown>[];
+    unrecognisedColumns?: string[];
+    detectedColumns?: string[];
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const limit = 20;
 
@@ -200,7 +207,14 @@ export default function RetailersPage() {
         };
       });
 
-      setUploadSummary({ imported: result.imported, skipped: result.skipped ?? 0, failed: result.failed, reportRows });
+      setUploadSummary({
+        imported: result.imported,
+        skipped: result.skipped ?? 0,
+        failed: result.failed,
+        reportRows,
+        unrecognisedColumns: result.unrecognisedColumns ?? [],
+        detectedColumns: result.detectedColumns ?? [],
+      });
       fetchRetailers();
     } catch (err) {
       toast.dismiss(toastId);
@@ -282,29 +296,45 @@ export default function RetailersPage() {
 
       {/* Upload Result Banner */}
       {uploadSummary && (
-        <div className={`rounded-xl p-4 mb-4 flex items-center justify-between gap-4 ${
+        <div className={`rounded-xl p-4 mb-4 ${
           uploadSummary.failed === 0 ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'
         }`}>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{uploadSummary.failed === 0 ? '✅' : '⚠️'}</span>
-            <div>
-              <div className="flex gap-4 text-sm font-semibold">
-                <span className="text-green-700">✓ {uploadSummary.imported} imported</span>
-                {uploadSummary.skipped > 0 && <span className="text-blue-600">⊘ {uploadSummary.skipped} skipped (already exist)</span>}
-                {uploadSummary.failed  > 0 && <span className="text-red-600">✕ {uploadSummary.failed} failed</span>}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{uploadSummary.failed === 0 ? '✅' : '⚠️'}</span>
+              <div>
+                <div className="flex gap-4 text-sm font-semibold">
+                  <span className="text-green-700">✓ {uploadSummary.imported} imported</span>
+                  {uploadSummary.skipped > 0 && <span className="text-blue-600">⊘ {uploadSummary.skipped} skipped (already exist)</span>}
+                  {uploadSummary.failed  > 0 && <span className="text-red-600">✕ {uploadSummary.failed} failed</span>}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Download the report for row-by-row details and remarks.</p>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">Download the report for row-by-row details and remarks.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadReport}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap"
+              >
+                ⬇ Download Report
+              </button>
+              <button onClick={() => setUploadSummary(null)} className="text-gray-400 hover:text-gray-600 text-lg px-1">✕</button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={downloadReport}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap"
-            >
-              ⬇ Download Report
-            </button>
-            <button onClick={() => setUploadSummary(null)} className="text-gray-400 hover:text-gray-600 text-lg px-1">✕</button>
-          </div>
+
+          {/* Column mapping diagnostic */}
+          {(uploadSummary.unrecognisedColumns?.length ?? 0) > 0 && (
+            <div className="mt-3 p-3 bg-white border border-amber-200 rounded-lg text-xs">
+              <p className="font-semibold text-amber-700 mb-1">⚠ Unrecognised columns in your file (these were ignored):</p>
+              <p className="text-gray-600 font-mono">{uploadSummary.unrecognisedColumns!.join(' · ')}</p>
+              <p className="text-gray-500 mt-1">
+                Mapped successfully: <span className="font-mono text-gray-700">{(uploadSummary.detectedColumns ?? []).join(' · ') || 'none'}</span>
+              </p>
+              <p className="text-gray-500 mt-1">
+                Required columns: <span className="font-mono text-gray-700">Retailer ID · Retailer Name · Phone Number · Slab Winner</span>
+              </p>
+            </div>
+          )}
         </div>
       )}
 
