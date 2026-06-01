@@ -166,13 +166,15 @@ export async function POST(request: NextRequest) {
     // Delete draft
     await db.collection('drafts').doc(retailerId).delete();
 
-    // Send WhatsApp async
+    // Send WhatsApp async — only mark sent if MSG91 actually accepted the message
     sendWhatsappConfirmation(retailer.mobile, storeName, giftName)
-      .then(async () => {
-        await db.collection('submissions').doc(submissionRef.id).update({
-          whatsappSent: true,
-          whatsappSentAt: new Date(),
-        });
+      .then(async (sent) => {
+        if (sent) {
+          await db.collection('submissions').doc(submissionRef.id).update({
+            whatsappSent: true,
+            whatsappSentAt: new Date(),
+          });
+        }
       })
       .catch((err) => console.error('[WhatsApp send error]', err));
 

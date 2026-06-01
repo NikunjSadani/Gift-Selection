@@ -40,6 +40,11 @@ env:
     availability:
       - RUNTIME
 
+  - variable: MSG91_WHATSAPP_INTEGRATED_NUMBER
+    value: "917003202293"
+    availability:
+      - RUNTIME
+
   - variable: FIREBASE_STORAGE_BUCKET
     secret: FIREBASE_STORAGE_BUCKET
     availability:

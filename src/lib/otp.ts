@@ -29,50 +29,73 @@ export async function sendOtp(mobile: string, otp: string): Promise<void> {
   }
 }
 
+/**
+ * Sends a WhatsApp confirmation message via MSG91.
+ * Returns true if MSG91 accepted the message, false otherwise.
+ */
 export async function sendWhatsappConfirmation(
   mobile: string,
   name: string,
   giftName: string,
-): Promise<void> {
-  if (!process.env.MSG91_AUTH_KEY || !process.env.MSG91_WHATSAPP_TEMPLATE) {
+): Promise<boolean> {
+  const authKey          = process.env.MSG91_AUTH_KEY?.trim();
+  const templateName     = process.env.MSG91_WHATSAPP_TEMPLATE?.trim();
+  const integratedNumber = process.env.MSG91_WHATSAPP_INTEGRATED_NUMBER?.trim();
+
+  if (!authKey || !templateName || !integratedNumber) {
     console.log(
-      `[DEV WhatsApp] Mobile: ${mobile} | Name: ${name} | Gift: ${giftName}`
+      `[DEV WhatsApp] Mobile: ${mobile} | Name: ${name} | Gift: ${giftName}` +
+      (!authKey ? ' | MISSING: MSG91_AUTH_KEY' : '') +
+      (!templateName ? ' | MISSING: MSG91_WHATSAPP_TEMPLATE' : '') +
+      (!integratedNumber ? ' | MISSING: MSG91_WHATSAPP_INTEGRATED_NUMBER' : '')
     );
-    return;
+    return false;
   }
+
+  const recipient = mobile.startsWith('91') ? mobile : `91${mobile}`;
+
+  const requestBody = {
+    integrated_number: integratedNumber,  // business sender number registered in MSG91
+    content_type: 'template',
+    payload: {
+      to: recipient,                       // recipient's WhatsApp number
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'en' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: name },     // {{1}} — recipient name / store name
+              { type: 'text', text: giftName }, // {{2}} — gift selected
+            ],
+          },
+        ],
+      },
+    },
+  };
 
   try {
     const response = await fetch('https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        authkey: process.env.MSG91_AUTH_KEY,
+        authkey: authKey,
       },
-      body: JSON.stringify({
-        integrated_number: '91' + mobile,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          type: 'template',
-          template: {
-            name: process.env.MSG91_WHATSAPP_TEMPLATE,
-            language: { code: 'en' },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: name },    // {{1}} — recipient name
-                  { type: 'text', text: giftName }, // {{2}} — gift selected
-                ],
-              },
-            ],
-          },
-        },
-      }),
+      body: JSON.stringify(requestBody),
     });
     const data = await response.json();
-    console.log('[MSG91 WhatsApp]', data);
+    console.log('[MSG91 WhatsApp]', JSON.stringify(data));
+
+    // MSG91 returns { type: 'success' } on acceptance
+    const success = response.ok && data?.type === 'success';
+    if (!success) {
+      console.error('[MSG91 WhatsApp] Rejected:', JSON.stringify(data));
+    }
+    return success;
   } catch (err) {
     console.error('[MSG91 WhatsApp Error]', err);
+    return false;
   }
 }
