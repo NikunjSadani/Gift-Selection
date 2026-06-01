@@ -95,11 +95,38 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // For submissions with missing slabName, fetch slab names from retailer docs
+    const slabNameCache = new Map<string, string>();
+    const missingSlabNames = paged.filter(
+      (s) => !(s.slabName as string),
+    );
+    if (missingSlabNames.length > 0) {
+      await Promise.all(
+        missingSlabNames.map(async (s) => {
+          const r = retailerMap[s.retailerId as string];
+          const slabId = r?.slabId as string | undefined;
+          if (slabId && !slabNameCache.has(slabId)) {
+            const slabSnap = await db.collection('slabs').doc(slabId).get();
+            slabNameCache.set(
+              slabId,
+              slabSnap.exists ? ((slabSnap.data() as Record<string, unknown>).name as string) : '',
+            );
+          }
+        }),
+      );
+    }
+
     // Reshape: add nested `retailer` and `gift` objects expected by the UI
     const shaped = paged.map((s) => {
       const r = retailerMap[s.retailerId as string] ?? {};
+      // Prefer denormalized slabName on submission; fall back to slab lookup
+      const resolvedSlabName =
+        (s.slabName as string) ||
+        slabNameCache.get(r.slabId as string) ||
+        '';
       return {
         ...s,
+        slabName: resolvedSlabName,
         submittedAt: s.submittedAt instanceof Date
           ? s.submittedAt.toISOString()
           : typeof (s.submittedAt as { toDate?: unknown })?.toDate === 'function'
@@ -120,7 +147,7 @@ export async function GET(request: NextRequest) {
           ownerName: (r.ownerName as string | null) ?? null,
           cso: (r.cso as string | null) ?? null,
           csoPhone: (r.csoPhone as string | null) ?? null,
-          slab: { name: (s.slabName as string) ?? '' },
+          slab: { name: resolvedSlabName },
         },
       };
     });

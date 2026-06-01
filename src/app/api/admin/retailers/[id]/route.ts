@@ -52,7 +52,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.name !== undefined) updateData.name = body.name;
     if (body.ownerName !== undefined) updateData.ownerName = body.ownerName;
     if (body.mobile !== undefined) updateData.mobile = body.mobile;
-    if (body.slabId !== undefined) updateData.slabId = body.slabId;
+    if (body.slabId !== undefined) {
+      updateData.slabId = body.slabId;
+      // Keep denormalized slabName in sync
+      const slabSnap = await db.collection('slabs').doc(body.slabId).get();
+      updateData.slabName = slabSnap.exists
+        ? ((slabSnap.data() as Record<string, unknown>).name as string)
+        : '';
+    }
     if (body.ndaCode !== undefined) updateData.ndaCode = body.ndaCode;
     if (body.addressLine1 !== undefined) updateData.addressLine1 = body.addressLine1;
     if (body.addressLine2 !== undefined) updateData.addressLine2 = body.addressLine2;

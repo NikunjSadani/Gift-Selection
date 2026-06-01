@@ -95,6 +95,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'duplicate_retailer_id', message: `Retailer ID "${retailerId}" already exists` }, { status: 409 });
     }
 
+    // Resolve slab name so it can be denormalized on the retailer and later on submissions
+    const slabSnap = await db.collection('slabs').doc(slabId).get();
+    if (!slabSnap.exists) {
+      return NextResponse.json({ error: 'invalid_slab', message: `Slab "${slabId}" not found` }, { status: 400 });
+    }
+    const slabName = (slabSnap.data() as Record<string, unknown>).name as string;
+
     const now = new Date();
     const retailerData = {
       retailerId,
@@ -102,6 +109,7 @@ export async function POST(request: NextRequest) {
       ownerName: ownerName || null,
       mobile,
       slabId,
+      slabName,
       ndaCode: ndaCode || null,
       addressLine1: addressLine1 || null,
       addressLine2: addressLine2 || null,
