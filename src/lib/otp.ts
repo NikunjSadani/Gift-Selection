@@ -89,8 +89,8 @@ export async function sendWhatsappConfirmation(
     const data = await response.json();
     console.log('[MSG91 WhatsApp]', JSON.stringify(data));
 
-    // MSG91 returns { type: 'success' } on acceptance
-    const success = response.ok && data?.type === 'success';
+    // MSG91 returns { status: 'success', hasError: false } on acceptance
+    const success = response.ok && data?.status === 'success';
     if (!success) {
       console.error('[MSG91 WhatsApp] Rejected:', JSON.stringify(data));
     }
