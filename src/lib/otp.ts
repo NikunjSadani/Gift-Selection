@@ -58,6 +58,7 @@ export async function sendWhatsappConfirmation(
     integrated_number: integratedNumber,  // business sender number registered in MSG91
     content_type: 'template',
     payload: {
+      messaging_product: 'whatsapp',
       to: recipient,                       // recipient's WhatsApp number
       type: 'template',
       template: {
@@ -77,7 +78,7 @@ export async function sendWhatsappConfirmation(
   };
 
   try {
-    const response = await fetch('https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/', {
+    const response = await fetch('https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
