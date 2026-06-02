@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       integrated_number: integratedNumber,
       content_type: 'template',
       payload: {
+        messaging_product: 'whatsapp',
         to: recipient,
         type: 'template',
         template: {
