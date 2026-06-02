@@ -211,8 +211,10 @@ export default function SubmissionsPage() {
 
       const ws = XLSX.utils.json_to_sheet(rows);
 
-      // Attach hyperlinks to every Document Link cell so users can click directly
-      // instead of copy-pasting (which caused Chrome to add surrounding quotes).
+      // Replace Document Link cells with =HYPERLINK() formula cells.
+      // SheetJS CE does not support the .l hyperlink property (Pro only),
+      // but it does write formula cells — Excel renders =HYPERLINK() as a
+      // clickable blue link without any copy-paste quoting issues.
       const sheetRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
       let docLinkCol = -1;
       for (let col = sheetRange.s.c; col <= sheetRange.e.c; col++) {
@@ -223,7 +225,9 @@ export default function SubmissionsPage() {
         docUrls.forEach((url, i) => {
           if (!url) return;
           const cellAddr = XLSX.utils.encode_cell({ r: i + 1, c: docLinkCol });
-          if (ws[cellAddr]) ws[cellAddr].l = { Target: url };
+          // Escape any double-quotes in the URL (shouldn't happen but be safe)
+          const safeUrl = url.replace(/"/g, '%22');
+          ws[cellAddr] = { t: 'f', f: `HYPERLINK("${safeUrl}","Open Document")` };
         });
       }
 
