@@ -57,6 +57,19 @@ export async function PATCH(request: NextRequest) {
       giftImageUrl,
     });
 
+    // Send WhatsApp confirmation for the updated gift selection (async, non-blocking)
+    const storeName = (submission.storeName as string) || retailer.name;
+    sendWhatsappConfirmation(retailer.mobile, storeName, giftName)
+      .then(async (sent) => {
+        if (sent) {
+          await db.collection('submissions').doc(submission.id).update({
+            whatsappSent: true,
+            whatsappSentAt: new Date(),
+          });
+        }
+      })
+      .catch((err) => console.error('[WhatsApp gift-change send error]', err));
+
     return NextResponse.json({
       success: true,
       gift: { id: giftId, name: giftName, imageUrl: giftImageUrl },
