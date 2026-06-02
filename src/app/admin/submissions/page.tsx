@@ -176,31 +176,57 @@ export default function SubmissionsPage() {
         return url.startsWith('http') ? url : `${baseUrl}${url}`;
       };
 
-      const rows = all.map((s) => ({
-        'Reference ID':       s.referenceId,
-        'Retailer ID':        s.retailer.retailerId,
-        'Reward Tier (Slab)': s.retailer.slab.name,
-        'Mobile':             s.retailer.mobile,
-        'Owner Name':         s.retailer.ownerName || '',
-        'CSO':                s.retailer.cso || '',
-        'CSO Phone Number':   s.retailer.csoPhone || '',
-        'Gift Selected':      s.gift.name,
-        "Recipient's Name":   s.storeName,
-        'Address Line 1':     s.addressLine1,
-        'Address Line 2':     s.addressLine2 || '',
-        'City':               s.city,
-        'State':              s.state,
-        'Pincode':            s.pincode,
-        'Landmark':           s.landmark || '',
-        'Address Edited':     s.detailsEdited ? 'Yes' : 'No',
-        'Document Type':      s.documentType || '',
-        'Document Link':      resolveDocUrl(s.documentUrl),
-        'Submitted At':       new Date(s.submittedAt).toLocaleString('en-IN'),
-        'WhatsApp Sent':      s.whatsappSent ? 'Yes' : 'No',
-        'WhatsApp Sent At':   s.whatsappSentAt ? new Date(s.whatsappSentAt).toLocaleString('en-IN') : '',
-      }));
+      // Collect resolved document URLs in parallel with rows so we can attach
+      // them as proper Excel hyperlinks after the sheet is built.
+      const docUrls: string[] = [];
+
+      const rows = all.map((s) => {
+        const docUrl = resolveDocUrl(s.documentUrl);
+        docUrls.push(docUrl);
+        return {
+          'Reference ID':       s.referenceId,
+          'Retailer ID':        s.retailer.retailerId,
+          'Reward Tier (Slab)': s.retailer.slab.name,
+          'Mobile':             s.retailer.mobile,
+          'Owner Name':         s.retailer.ownerName || '',
+          'CSO':                s.retailer.cso || '',
+          'CSO Phone Number':   s.retailer.csoPhone || '',
+          'Gift Selected':      s.gift.name,
+          "Recipient's Name":   s.storeName,
+          'Address Line 1':     s.addressLine1,
+          'Address Line 2':     s.addressLine2 || '',
+          'City':               s.city,
+          'State':              s.state,
+          'Pincode':            s.pincode,
+          'Landmark':           s.landmark || '',
+          'Address Edited':     s.detailsEdited ? 'Yes' : 'No',
+          'Document Type':      s.documentType || '',
+          // Display text is short — the real URL is attached as a hyperlink below
+          'Document Link':      docUrl ? 'Open Document' : '',
+          'Submitted At':       new Date(s.submittedAt).toLocaleString('en-IN'),
+          'WhatsApp Sent':      s.whatsappSent ? 'Yes' : 'No',
+          'WhatsApp Sent At':   s.whatsappSentAt ? new Date(s.whatsappSentAt).toLocaleString('en-IN') : '',
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(rows);
+
+      // Attach hyperlinks to every Document Link cell so users can click directly
+      // instead of copy-pasting (which caused Chrome to add surrounding quotes).
+      const sheetRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      let docLinkCol = -1;
+      for (let col = sheetRange.s.c; col <= sheetRange.e.c; col++) {
+        const headerCell = ws[XLSX.utils.encode_cell({ r: 0, c: col })];
+        if (headerCell?.v === 'Document Link') { docLinkCol = col; break; }
+      }
+      if (docLinkCol >= 0) {
+        docUrls.forEach((url, i) => {
+          if (!url) return;
+          const cellAddr = XLSX.utils.encode_cell({ r: i + 1, c: docLinkCol });
+          if (ws[cellAddr]) ws[cellAddr].l = { Target: url };
+        });
+      }
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
       const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
