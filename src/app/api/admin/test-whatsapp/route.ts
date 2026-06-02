@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken } from '@/lib/auth';
 
-/**
- * Temporary diagnostic endpoint — tries multiple MSG91 payload formats and
- * returns responses for each so we can find which one works.
- * DELETE after fix is confirmed.
- */
 export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
@@ -23,94 +18,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'env_vars_missing' }, { status: 500 });
     }
 
-    const recipient = mobile.startsWith('91') ? mobile : `91${mobile}`;
     const storeName = name ?? 'Test Store';
     const giftName  = gift ?? 'Test Gift';
+    const headers   = { 'Content-Type': 'application/json', authkey: authKey };
 
-    const headers = { 'Content-Type': 'application/json', authkey: authKey };
+    // Strip and rebuild number variants
+    const mobileOnly   = mobile.replace(/^91/, '');           // 10-digit
+    const with91       = `91${mobileOnly}`;                    // 12-digit
+    const intNumOnly   = integratedNumber.replace(/^91/, ''); // sender without 91
 
-    const variants: Record<string, unknown>[] = [
-      // Variant A — current (with messaging_product, components inside template)
-      {
-        integrated_number: integratedNumber,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          to: recipient,
-          type: 'template',
-          template: {
-            name: templateName,
-            language: { code: 'en' },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: storeName }, { type: 'text', text: giftName }] }],
-          },
-        },
-      },
-      // Variant B — components outside template, inside payload
-      {
-        integrated_number: integratedNumber,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          to: recipient,
-          type: 'template',
-          template: { name: templateName, language: { code: 'en' } },
-          components: [{ type: 'body', parameters: [{ type: 'text', text: storeName }, { type: 'text', text: giftName }] }],
-        },
-      },
-      // Variant C — no components (minimal, to check if basic structure is accepted)
-      {
-        integrated_number: integratedNumber,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          to: recipient,
-          type: 'template',
-          template: { name: templateName, language: { code: 'en' } },
-        },
-      },
-      // Variant D — en_US language code
-      {
-        integrated_number: integratedNumber,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          to: recipient,
-          type: 'template',
-          template: {
-            name: templateName,
-            language: { code: 'en_US' },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: storeName }, { type: 'text', text: giftName }] }],
-          },
-        },
-      },
-      // Variant E — recipient without country code
-      {
-        integrated_number: integratedNumber,
-        content_type: 'template',
-        payload: {
-          messaging_product: 'whatsapp',
-          to: mobile.replace(/^91/, ''),
-          type: 'template',
-          template: {
-            name: templateName,
-            language: { code: 'en' },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: storeName }, { type: 'text', text: giftName }] }],
-          },
-        },
-      },
+    const components = [{ type: 'body', parameters: [{ type: 'text', text: storeName }, { type: 'text', text: giftName }] }];
+
+    const URL_BULK = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
+    const URL_SINGLE = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/';
+
+    type Variant = { label: string; url: string; body: unknown };
+    const variants: Variant[] = [
+      // F — array body (true "bulk" format)
+      { label: 'F-array-body', url: URL_BULK, body: [{ integrated_number: integratedNumber, content_type: 'template', payload: { messaging_product: 'whatsapp', to: with91, type: 'template', template: { name: templateName, language: { code: 'en' }, components } } }] },
+      // G — sender without 91
+      { label: 'G-sender-no91', url: URL_BULK, body: { integrated_number: intNumOnly, content_type: 'template', payload: { messaging_product: 'whatsapp', to: with91, type: 'template', template: { name: templateName, language: { code: 'en' }, components } } } },
+      // H — recipient without 91
+      { label: 'H-recipient-no91', url: URL_BULK, body: { integrated_number: integratedNumber, content_type: 'template', payload: { messaging_product: 'whatsapp', to: mobileOnly, type: 'template', template: { name: templateName, language: { code: 'en' }, components } } } },
+      // I — single message endpoint
+      { label: 'I-single-endpoint', url: URL_SINGLE, body: { integrated_number: integratedNumber, content_type: 'template', payload: { messaging_product: 'whatsapp', to: with91, type: 'template', template: { name: templateName, language: { code: 'en' }, components } } } },
+      // J — flat structure, no nested payload
+      { label: 'J-flat', url: URL_BULK, body: { integrated_number: integratedNumber, to: with91, content_type: 'template', messaging_product: 'whatsapp', type: 'template', template: { name: templateName, language: { code: 'en' }, components } } },
     ];
 
-    const results: Record<string, unknown>[] = [];
-    for (let i = 0; i < variants.length; i++) {
-      const res = await fetch('https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(variants[i]),
-      });
+    const results = [];
+    for (const v of variants) {
+      const res  = await fetch(v.url, { method: 'POST', headers, body: JSON.stringify(v.body) });
       const body = await res.json();
-      results.push({ variant: String.fromCharCode(65 + i), httpStatus: res.status, msg91Response: body });
-      // Stop at first success
-      if (res.ok && (body as Record<string, unknown>).type === 'success') break;
+      results.push({ variant: v.label, url: v.url, httpStatus: res.status, response: body });
+      if (res.ok && (body as Record<string,unknown>).type === 'success') break;
     }
 
     return NextResponse.json({ results });
