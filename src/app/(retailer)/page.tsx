@@ -175,7 +175,7 @@ export default function LoginPage() {
               value={mobile}
               onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
               placeholder="Enter 10-digit mobile number"
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-[#E3000F] transition-colors"
+              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
               onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
             />
             <button
@@ -211,7 +211,7 @@ export default function LoginPage() {
                   value={digit}
                   onChange={(e) => handleOtpChange(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                  className="w-11 h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#E3000F] transition-colors"
+                  className="w-11 h-14 text-center text-xl font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#E3000F] transition-colors"
                 />
               ))}
             </div>
