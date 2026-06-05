@@ -215,7 +215,7 @@ export default function RetailersPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || 'Failed');
+        throw new Error(d.message || d.error || 'Failed');
       }
       toast.success('Retailer updated');
       setEditRetailer(null);

@@ -51,7 +51,21 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     };
     if (body.name !== undefined) updateData.name = body.name;
     if (body.ownerName !== undefined) updateData.ownerName = body.ownerName;
-    if (body.mobile !== undefined) updateData.mobile = body.mobile;
+    if (body.mobile !== undefined) {
+      // Enforce mobile uniqueness — exclude this retailer's own record
+      if (body.mobile !== before.mobile) {
+        const mobileExists = await db.collection('retailers').where('mobile', '==', body.mobile).get();
+        const conflict = mobileExists.docs.find((d) => d.id !== id);
+        if (conflict) {
+          const owner = (conflict.data() as Record<string, unknown>).retailerId as string;
+          return NextResponse.json(
+            { error: 'duplicate_mobile', message: `Phone number ${body.mobile} is already registered to Retailer ID "${owner}"` },
+            { status: 409 },
+          );
+        }
+      }
+      updateData.mobile = body.mobile;
+    }
     if (body.slabId !== undefined) {
       updateData.slabId = body.slabId;
       // Keep denormalized slabName in sync
