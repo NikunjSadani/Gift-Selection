@@ -253,7 +253,12 @@ export async function POST(request: NextRequest) {
         rowResults.push({ row: rowNum, status: 'Failed', remark: `Invalid phone number "${row.mobile}" — must be exactly 10 digits` });
         continue;
       }
-      if (row.pincode && !/^\d{6}$/.test(row.pincode)) {
+      if (!row.pincode) {
+        failed++;
+        rowResults.push({ row: rowNum, status: 'Failed', remark: 'Missing: Pin Code' });
+        continue;
+      }
+      if (!/^\d{6}$/.test(row.pincode)) {
         failed++;
         rowResults.push({ row: rowNum, status: 'Failed', remark: `Invalid pin code "${row.pincode}" — must be exactly 6 digits` });
         continue;

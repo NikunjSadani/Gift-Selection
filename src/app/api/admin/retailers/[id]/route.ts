@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.city !== undefined) updateData.city = body.city;
     if (body.state !== undefined) updateData.state = body.state;
     if (body.pincode !== undefined) {
-      if (body.pincode && !/^\d{6}$/.test(body.pincode)) {
+      if (!/^\d{6}$/.test(body.pincode)) {
         return NextResponse.json({ error: 'invalid_pincode', message: 'Pin code must be exactly 6 digits' }, { status: 400 });
       }
       updateData.pincode = body.pincode;

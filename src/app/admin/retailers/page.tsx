@@ -105,15 +105,15 @@ export default function RetailersPage() {
   useEffect(() => { fetchRetailers(); }, [page, search, slabFilter, statusFilter]);
 
   const handleCreate = async () => {
-    if (!form.retailerId || !form.name || !form.mobile || !form.slabId) {
-      toast.error('Please fill all required fields');
+    if (!form.retailerId || !form.name || !form.mobile || !form.slabId || !form.pincode) {
+      toast.error('Retailer ID, Name, Phone Number, Slab and Pin Code are required');
       return;
     }
     if (!/^\d{10}$/.test(form.mobile)) {
       toast.error('Phone number must be exactly 10 digits');
       return;
     }
-    if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
+    if (!/^\d{6}$/.test(form.pincode)) {
       toast.error('Pin code must be exactly 6 digits');
       return;
     }
@@ -209,15 +209,15 @@ export default function RetailersPage() {
 
   const handleEdit = async () => {
     if (!editRetailer) return;
-    if (!editForm.name || !editForm.mobile || !editForm.slabId) {
-      toast.error('Store Name, Phone Number and Slab are required');
+    if (!editForm.name || !editForm.mobile || !editForm.slabId || !editForm.pincode) {
+      toast.error('Store Name, Phone Number, Slab and Pin Code are required');
       return;
     }
     if (!/^\d{10}$/.test(editForm.mobile)) {
       toast.error('Phone number must be exactly 10 digits');
       return;
     }
-    if (editForm.pincode && !/^\d{6}$/.test(editForm.pincode)) {
+    if (!/^\d{6}$/.test(editForm.pincode)) {
       toast.error('Pin code must be exactly 6 digits');
       return;
     }
@@ -628,7 +628,7 @@ export default function RetailersPage() {
                 { field: 'landmark',     label: 'Landmark',         type: 'text' },
                 { field: 'city',         label: 'City',             type: 'text' },
                 { field: 'state',        label: 'State',            type: 'text' },
-                { field: 'pincode',      label: 'Pin Code',         type: 'text' },
+                { field: 'pincode',      label: 'Pin Code *',       type: 'text' },
                 { field: 'cso',          label: 'CSO',              type: 'text' },
                 { field: 'csoPhone',     label: 'CSO Phone Number', type: 'tel'  },
               ].map(({ field, label, type }) => (
@@ -706,7 +706,7 @@ export default function RetailersPage() {
                 { field: 'landmark',     label: 'Landmark',         type: 'text' },
                 { field: 'city',         label: 'City',             type: 'text' },
                 { field: 'state',        label: 'State',            type: 'text' },
-                { field: 'pincode',      label: 'Pin Code',         type: 'text' },
+                { field: 'pincode',      label: 'Pin Code *',       type: 'text' },
                 { field: 'cso',          label: 'CSO',              type: 'text' },
                 { field: 'csoPhone',     label: 'CSO Phone Number', type: 'tel'  },
               ].map(({ field, label, type }) => (

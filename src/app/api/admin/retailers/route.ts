@@ -85,15 +85,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { retailerId, name, ownerName, mobile, slabId, ndaCode, addressLine1, addressLine2, city, state, pincode, landmark, cso, csoPhone, gstNumber } = body;
 
-    if (!retailerId || !name || !mobile || !slabId) {
-      return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
+    if (!retailerId || !name || !mobile || !slabId || !pincode) {
+      return NextResponse.json({ error: 'missing_required_fields', message: 'Retailer ID, Name, Phone Number, Slab and Pin Code are required' }, { status: 400 });
     }
 
     // Format validation
     if (!/^\d{10}$/.test(mobile)) {
       return NextResponse.json({ error: 'invalid_mobile', message: 'Phone number must be exactly 10 digits' }, { status: 400 });
     }
-    if (pincode && !/^\d{6}$/.test(pincode)) {
+    if (!/^\d{6}$/.test(pincode)) {
       return NextResponse.json({ error: 'invalid_pincode', message: 'Pin code must be exactly 6 digits' }, { status: 400 });
     }
 
