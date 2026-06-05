@@ -417,11 +417,11 @@ export default function GiftPage() {
                 } ${tappable ? 'cursor-pointer active:scale-[0.98] hover:shadow-md' : ''}`}
               >
                 {/* Thumbnail */}
-                <div className={`w-28 h-24 flex-none relative ${
-                  gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
+                <div className={`w-28 h-28 flex-none relative ${
+                  gift.imageUrl ? 'bg-white' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`
                 }`}>
                   {gift.imageUrl ? (
-                    <Image src={gift.imageUrl} alt={gift.name} fill sizes="112px" className="object-cover" />
+                    <Image src={gift.imageUrl} alt={gift.name} fill sizes="112px" className="object-contain p-1" />
                   ) : (
                     <div className="flex items-center justify-center h-full">
                       <span className="text-4xl">🎁</span>
@@ -643,10 +643,10 @@ export default function GiftPage() {
       {modalGift && !giftConfirmed && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setModalGift(null)}>
           <div className="bg-white rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className={`relative h-60 flex-none ${
-              modalGift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === modalGift.id) % GRADIENT_COLORS.length]}`}`}>
+            <div className={`relative h-72 flex-none ${
+              modalGift.imageUrl ? 'bg-white' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === modalGift.id) % GRADIENT_COLORS.length]}`}`}>
               {modalGift.imageUrl
-                ? <Image src={modalGift.imageUrl} alt={modalGift.name} fill sizes="100vw" className="object-cover rounded-t-3xl" />
+                ? <Image src={modalGift.imageUrl} alt={modalGift.name} fill sizes="100vw" className="object-contain p-4 rounded-t-3xl" />
                 : <div className="flex items-center justify-center h-full rounded-t-3xl"><span className="text-9xl">🎁</span></div>}
               <button onClick={() => setModalGift(null)}
                 className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold">✕</button>
@@ -704,10 +704,10 @@ export default function GiftPage() {
                   <div key={gift.id} onClick={() => !isCurrent && setChangeModalGift(gift)}
                     className={`flex gap-3 bg-white rounded-2xl shadow-sm overflow-hidden border transition-all ${
                       isCurrent ? 'border-green-400 bg-green-50 cursor-default' : 'border-gray-100 cursor-pointer active:scale-[0.98] hover:shadow-md'}`}>
-                    <div className={`w-24 h-20 flex-none relative ${
-                      gift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`}`}>
+                    <div className={`w-24 h-24 flex-none relative ${
+                      gift.imageUrl ? 'bg-white' : `bg-gradient-to-br ${GRADIENT_COLORS[i % GRADIENT_COLORS.length]}`}`}>
                       {gift.imageUrl
-                        ? <Image src={gift.imageUrl} alt={gift.name} fill sizes="96px" className="object-cover" />
+                        ? <Image src={gift.imageUrl} alt={gift.name} fill sizes="96px" className="object-contain p-1" />
                         : <div className="flex items-center justify-center h-full"><span className="text-3xl">🎁</span></div>}
                       {isCurrent && (
                         <div className="absolute top-1 left-1 bg-green-500 rounded-full w-5 h-5 flex items-center justify-center">
@@ -741,10 +741,10 @@ export default function GiftPage() {
       {changeModalGift && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={() => setChangeModalGift(null)}>
           <div className="bg-white rounded-t-3xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className={`relative h-52 flex-none ${
-              changeModalGift.imageUrl ? 'bg-gray-100' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === changeModalGift.id) % GRADIENT_COLORS.length]}`}`}>
+            <div className={`relative h-64 flex-none ${
+              changeModalGift.imageUrl ? 'bg-white' : `bg-gradient-to-br ${GRADIENT_COLORS[gifts.findIndex((g) => g.id === changeModalGift.id) % GRADIENT_COLORS.length]}`}`}>
               {changeModalGift.imageUrl
-                ? <Image src={changeModalGift.imageUrl} alt={changeModalGift.name} fill sizes="100vw" className="object-cover rounded-t-3xl" />
+                ? <Image src={changeModalGift.imageUrl} alt={changeModalGift.name} fill sizes="100vw" className="object-contain p-4 rounded-t-3xl" />
                 : <div className="flex items-center justify-center h-full rounded-t-3xl"><span className="text-9xl">🎁</span></div>}
               <button onClick={() => setChangeModalGift(null)}
                 className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold">✕</button>
