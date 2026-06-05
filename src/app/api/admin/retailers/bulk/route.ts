@@ -248,6 +248,16 @@ export async function POST(request: NextRequest) {
         rowResults.push({ row: rowNum, status: 'Failed', remark: 'Missing: Phone Number' });
         continue;
       }
+      if (!/^\d{10}$/.test(row.mobile)) {
+        failed++;
+        rowResults.push({ row: rowNum, status: 'Failed', remark: `Invalid phone number "${row.mobile}" — must be exactly 10 digits` });
+        continue;
+      }
+      if (row.pincode && !/^\d{6}$/.test(row.pincode)) {
+        failed++;
+        rowResults.push({ row: rowNum, status: 'Failed', remark: `Invalid pin code "${row.pincode}" — must be exactly 6 digits` });
+        continue;
+      }
       if (!row.slabId) {
         failed++;
         rowResults.push({ row: rowNum, status: 'Failed', remark: 'Missing: Slab Winner' });

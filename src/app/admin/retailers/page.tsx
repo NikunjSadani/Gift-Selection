@@ -109,6 +109,14 @@ export default function RetailersPage() {
       toast.error('Please fill all required fields');
       return;
     }
+    if (!/^\d{10}$/.test(form.mobile)) {
+      toast.error('Phone number must be exactly 10 digits');
+      return;
+    }
+    if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
+      toast.error('Pin code must be exactly 6 digits');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/admin/retailers', {
@@ -203,6 +211,14 @@ export default function RetailersPage() {
     if (!editRetailer) return;
     if (!editForm.name || !editForm.mobile || !editForm.slabId) {
       toast.error('Store Name, Phone Number and Slab are required');
+      return;
+    }
+    if (!/^\d{10}$/.test(editForm.mobile)) {
+      toast.error('Phone number must be exactly 10 digits');
+      return;
+    }
+    if (editForm.pincode && !/^\d{6}$/.test(editForm.pincode)) {
+      toast.error('Pin code must be exactly 6 digits');
       return;
     }
     setEditSaving(true);

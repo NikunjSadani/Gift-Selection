@@ -89,6 +89,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
     }
 
+    // Format validation
+    if (!/^\d{10}$/.test(mobile)) {
+      return NextResponse.json({ error: 'invalid_mobile', message: 'Phone number must be exactly 10 digits' }, { status: 400 });
+    }
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      return NextResponse.json({ error: 'invalid_pincode', message: 'Pin code must be exactly 6 digits' }, { status: 400 });
+    }
+
     // Enforce retailer ID uniqueness
     const existing = await db.collection('retailers').where('retailerId', '==', retailerId).get();
     if (!existing.empty) {

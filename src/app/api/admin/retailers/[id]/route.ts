@@ -52,6 +52,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.name !== undefined) updateData.name = body.name;
     if (body.ownerName !== undefined) updateData.ownerName = body.ownerName;
     if (body.mobile !== undefined) {
+      if (!/^\d{10}$/.test(body.mobile)) {
+        return NextResponse.json({ error: 'invalid_mobile', message: 'Phone number must be exactly 10 digits' }, { status: 400 });
+      }
       // Enforce mobile uniqueness — exclude this retailer's own record
       if (body.mobile !== before.mobile) {
         const mobileExists = await db.collection('retailers').where('mobile', '==', body.mobile).get();
@@ -79,7 +82,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.addressLine2 !== undefined) updateData.addressLine2 = body.addressLine2;
     if (body.city !== undefined) updateData.city = body.city;
     if (body.state !== undefined) updateData.state = body.state;
-    if (body.pincode !== undefined) updateData.pincode = body.pincode;
+    if (body.pincode !== undefined) {
+      if (body.pincode && !/^\d{6}$/.test(body.pincode)) {
+        return NextResponse.json({ error: 'invalid_pincode', message: 'Pin code must be exactly 6 digits' }, { status: 400 });
+      }
+      updateData.pincode = body.pincode;
+    }
     if (body.landmark !== undefined) updateData.landmark = body.landmark;
     if (body.cso !== undefined) updateData.cso = body.cso;
     if (body.csoPhone !== undefined) updateData.csoPhone = body.csoPhone;
