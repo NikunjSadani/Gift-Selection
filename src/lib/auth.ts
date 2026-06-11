@@ -46,6 +46,10 @@ export async function signRetailerToken(retailerId: string, mobile: string): Pro
 
 export async function verifyRetailerToken(token: string): Promise<RetailerTokenPayload> {
   const { payload } = await jwtVerify(token, JWT_SECRET);
+  // Reject outlet_selection_token being used as a retailer_token
+  if ((payload as Record<string, unknown>).type === 'outlet_selection') {
+    throw new Error('invalid_token_type');
+  }
   return payload as unknown as RetailerTokenPayload;
 }
 

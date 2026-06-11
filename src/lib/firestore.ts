@@ -198,7 +198,8 @@ export async function getRetailerByMobile(mobile: string): Promise<Retailer | nu
   return docToRetailer(doc.id, doc.data() as Record<string, unknown>);
 }
 
-/** Returns ALL active retailers registered to this mobile number (multi-outlet support). */
+/** Returns ALL active retailers registered to this mobile number (multi-outlet support).
+ *  Sorted by retailerId for consistent ordering in the outlet picker. */
 export async function getRetailersByMobile(mobile: string): Promise<Retailer[]> {
   const snap = await db
     .collection('retailers')
@@ -206,7 +207,10 @@ export async function getRetailersByMobile(mobile: string): Promise<Retailer[]> 
     .where('status', '==', 'active')
     .get();
   if (snap.empty) return [];
-  return snap.docs.map((doc) => docToRetailer(doc.id, doc.data() as Record<string, unknown>));
+  const retailers = snap.docs.map((doc) => docToRetailer(doc.id, doc.data() as Record<string, unknown>));
+  // Sort by human-readable retailerId so the picker always shows outlets in the same order
+  retailers.sort((a, b) => a.retailerId.localeCompare(b.retailerId));
+  return retailers;
 }
 
 export async function getRetailerById(id: string): Promise<Retailer | null> {

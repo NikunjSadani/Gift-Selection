@@ -111,10 +111,13 @@ export default function ConfirmationPage() {
         body: JSON.stringify({ retailerId: outlet.id }),
       });
       const data = await res.json();
-      if (!res.ok) return;
+      if (!res.ok) {
+        toast.error(data.message || 'Could not switch outlet. Please try again.');
+        return;
+      }
       router.replace(data.hasSubmission ? '/confirmation' : '/gift');
     } catch {
-      // network error — allow retry
+      toast.error('Network error. Please try again.');
     } finally {
       setSwitchingOutlet(null);
     }

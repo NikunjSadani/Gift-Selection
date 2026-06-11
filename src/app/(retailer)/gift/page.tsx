@@ -65,6 +65,7 @@ export default function GiftPage() {
   const [slab, setSlab] = useState<{ name: string; internalCode: string } | null>(null);
   const [retailerMobile, setRetailerMobile] = useState('');
   const [loading, setLoading] = useState(true);
+  const [hasMultipleOutlets, setHasMultipleOutlets] = useState(false);
 
   // Gift selection
   const [selectedGift, setSelectedGift] = useState<Gift | null>(null);
@@ -142,9 +143,10 @@ export default function GiftPage() {
 
     const load = async () => {
       try {
-        const [giftsRes, meRes] = await Promise.all([
+        const [giftsRes, meRes, outletsRes] = await Promise.all([
           fetch('/api/gifts', { credentials: 'include' }),
           fetch('/api/retailer/me', { credentials: 'include' }),
+          fetch('/api/retailer/outlets', { credentials: 'include' }),
         ]);
 
         if (!giftsRes.ok) { router.replace('/'); return; }
@@ -192,6 +194,12 @@ export default function GiftPage() {
           if (retailer.draft?.giftConfirmed) setGiftConfirmed(true);
           // giftSelectedAt on the draft = the confirm-clock timestamp
           if (retailer.draft?.giftSelectedAt) setGiftConfirmedAt(retailer.draft.giftSelectedAt);
+        }
+
+        // Multi-outlet: check if owner has more than one active outlet
+        if (outletsRes.ok) {
+          const { outlets } = await outletsRes.json();
+          setHasMultipleOutlets(Array.isArray(outlets) && outlets.length > 1);
         }
       } catch {
         toast.error('Failed to load. Please refresh.');
@@ -371,6 +379,18 @@ export default function GiftPage() {
             <p className="text-white/80 text-xs font-semibold uppercase tracking-widest">Your Reward Tier</p>
             <p className="text-[#FFD200] font-black text-2xl leading-none drop-shadow-sm">{slab.name}</p>
           </div>
+        )}
+
+        {/* Switch outlet link — only shown for multi-outlet owners */}
+        {hasMultipleOutlets && (
+          <button
+            type="button"
+            onClick={() => router.push('/select-outlet')}
+            className="mx-4 mt-3 w-[calc(100%-2rem)] text-xs text-[#E3000F] font-medium bg-red-50 border border-red-100 rounded-xl px-3 py-2 text-left flex items-center justify-between"
+          >
+            <span>🏪 You have multiple outlets</span>
+            <span className="underline">Switch outlet →</span>
+          </button>
         )}
 
         {/* Section header */}

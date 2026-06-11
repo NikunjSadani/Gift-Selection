@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 interface OutletOption {
   id: string;
@@ -16,16 +17,28 @@ export default function SelectOutletPage() {
   const [selecting, setSelecting] = useState<string | null>(null);
 
   useEffect(() => {
+    // Primary: sessionStorage (set by login page after OTP verify)
     const stored = sessionStorage.getItem('kw_outlets');
-    if (!stored) {
-      router.replace('/');
-      return;
+    if (stored) {
+      try {
+        setOutlets(JSON.parse(stored));
+        return;
+      } catch { /* fall through to API */ }
     }
-    try {
-      setOutlets(JSON.parse(stored));
-    } catch {
-      router.replace('/');
-    }
+
+    // Fallback: fetch from API using existing retailer_token
+    // (handles browser back-button, refresh, or navigating here from within the app)
+    fetch('/api/retailer/outlets', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || data.outlets.length < 2) {
+          // Single-outlet user or not logged in — redirect to home
+          router.replace('/');
+          return;
+        }
+        setOutlets(data.outlets);
+      })
+      .catch(() => router.replace('/'));
   }, [router]);
 
   const handleSelect = async (outlet: OutletOption) => {
@@ -41,14 +54,17 @@ export default function SelectOutletPage() {
       if (!res.ok) {
         if (data.error === 'session_expired') {
           sessionStorage.removeItem('kw_outlets');
+          toast.error('Session expired. Please log in again.');
           router.replace('/');
+        } else {
+          toast.error('Could not select outlet. Please try again.');
         }
         return;
       }
       sessionStorage.removeItem('kw_outlets');
       router.replace(data.hasSubmission ? '/confirmation' : '/gift');
     } catch {
-      // network error — allow retry
+      toast.error('Network error. Please try again.');
     } finally {
       setSelecting(null);
     }
