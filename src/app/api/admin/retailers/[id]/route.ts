@@ -55,18 +55,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       if (!/^\d{10}$/.test(body.mobile)) {
         return NextResponse.json({ error: 'invalid_mobile', message: 'Phone number must be exactly 10 digits' }, { status: 400 });
       }
-      // Enforce mobile uniqueness — exclude this retailer's own record
-      if (body.mobile !== before.mobile) {
-        const mobileExists = await db.collection('retailers').where('mobile', '==', body.mobile).get();
-        const conflict = mobileExists.docs.find((d) => d.id !== id);
-        if (conflict) {
-          const owner = (conflict.data() as Record<string, unknown>).retailerId as string;
-          return NextResponse.json(
-            { error: 'duplicate_mobile', message: `Phone number ${body.mobile} is already registered to Retailer ID "${owner}"` },
-            { status: 409 },
-          );
-        }
-      }
       updateData.mobile = body.mobile;
     }
     if (body.slabId !== undefined) {

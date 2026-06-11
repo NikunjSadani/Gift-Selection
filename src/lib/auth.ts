@@ -19,6 +19,23 @@ export interface AdminTokenPayload {
   role: string; // "admin" | "superadmin"
 }
 
+/** Short-lived token (15 min) used only to bridge OTP verify → outlet selection. */
+export async function signOutletSelectionToken(mobile: string): Promise<string> {
+  return await new SignJWT({ mobile, type: 'outlet_selection' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('15m')
+    .sign(JWT_SECRET);
+}
+
+export async function verifyOutletSelectionToken(token: string): Promise<{ mobile: string }> {
+  const { payload } = await jwtVerify(token, JWT_SECRET);
+  if ((payload as Record<string, unknown>).type !== 'outlet_selection') {
+    throw new Error('invalid_token_type');
+  }
+  return { mobile: (payload as Record<string, unknown>).mobile as string };
+}
+
 export async function signRetailerToken(retailerId: string, mobile: string): Promise<string> {
   return await new SignJWT({ retailerId, mobile })
     .setProtectedHeader({ alg: 'HS256' })

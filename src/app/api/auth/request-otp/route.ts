@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCampaignStatus } from '@/lib/campaign';
-import { getRetailerByMobile } from '@/lib/firestore';
+import { getRetailersByMobile } from '@/lib/firestore';
 import { generateOtp, sendOtp } from '@/lib/otp';
 import { createOtpRecord, deleteOtpsByMobile } from '@/lib/otp-store';
 
@@ -18,12 +18,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'campaign_inactive', status }, { status: 403 });
     }
 
-    const retailer = await getRetailerByMobile(mobile);
-    if (!retailer) {
+    // Support multi-outlet: any active retailer on this mobile is enough to send OTP
+    const retailers = await getRetailersByMobile(mobile);
+    if (retailers.length === 0) {
       return NextResponse.json({ error: 'not_registered' }, { status: 404 });
-    }
-    if (retailer.status !== 'active') {
-      return NextResponse.json({ error: 'inactive' }, { status: 403 });
     }
 
     // Remove old OTPs and issue a fresh one

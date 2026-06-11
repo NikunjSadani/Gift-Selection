@@ -103,13 +103,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'duplicate_retailer_id', message: `Retailer ID "${retailerId}" already exists` }, { status: 409 });
     }
 
-    // Enforce mobile uniqueness
-    const mobileExists = await db.collection('retailers').where('mobile', '==', mobile).get();
-    if (!mobileExists.empty) {
-      const owner = (mobileExists.docs[0].data() as Record<string, unknown>).retailerId as string;
-      return NextResponse.json({ error: 'duplicate_mobile', message: `Phone number ${mobile} is already registered to Retailer ID "${owner}"` }, { status: 409 });
-    }
-
     // Resolve slab name so it can be denormalized on the retailer and later on submissions
     const slabSnap = await db.collection('slabs').doc(slabId).get();
     if (!slabSnap.exists) {

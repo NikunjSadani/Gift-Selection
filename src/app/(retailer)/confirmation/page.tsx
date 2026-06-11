@@ -42,6 +42,14 @@ function formatCountdown(submittedAt: string): { label: string; urgent: boolean;
   return { label: `${h}h ${m}m left to change`, urgent, expired: false };
 }
 
+interface OutletOption {
+  id: string;
+  retailerId: string;
+  slabName: string;
+  hasSubmission: boolean;
+  isCurrent: boolean;
+}
+
 export default function ConfirmationPage() {
   const router = useRouter();
   const [submission, setSubmission] = useState<Submission | null>(null);
@@ -52,6 +60,10 @@ export default function ConfirmationPage() {
   const [changeSheetOpen, setChangeSheetOpen] = useState(false);
   const [modalGift, setModalGift] = useState<Gift | null>(null);
   const [changingGift, setChangingGift] = useState(false);
+
+  // Multi-outlet
+  const [otherOutlets, setOtherOutlets] = useState<OutletOption[]>([]);
+  const [switchingOutlet, setSwitchingOutlet] = useState<string | null>(null);
 
   // Countdown ticker
   const [, setTick] = useState(0);
@@ -64,13 +76,22 @@ export default function ConfirmationPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/retailer/me', { credentials: 'include' });
+        const [meRes, outletsRes] = await Promise.all([
+          fetch('/api/retailer/me', { credentials: 'include' }),
+          fetch('/api/retailer/outlets', { credentials: 'include' }),
+        ]);
         if (cancelled) return;
-        if (!res.ok) { router.replace('/'); return; }
-        const { retailer } = await res.json();
+        if (!meRes.ok) { router.replace('/'); return; }
+        const { retailer } = await meRes.json();
         if (cancelled) return;
         if (!retailer.submission) { router.replace('/gift'); return; }
         setSubmission(retailer.submission);
+
+        if (outletsRes.ok) {
+          const { outlets } = await outletsRes.json();
+          // Show only outlets that are NOT the current one
+          setOtherOutlets((outlets as OutletOption[]).filter((o) => !o.isCurrent));
+        }
       } catch {
         if (!cancelled) router.replace('/');
       } finally {
@@ -79,6 +100,25 @@ export default function ConfirmationPage() {
     })();
     return () => { cancelled = true; };
   }, [router]);
+
+  const handleSwitchOutlet = async (outlet: OutletOption) => {
+    setSwitchingOutlet(outlet.id);
+    try {
+      const res = await fetch('/api/auth/select-outlet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ retailerId: outlet.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      router.replace(data.hasSubmission ? '/confirmation' : '/gift');
+    } catch {
+      // network error — allow retry
+    } finally {
+      setSwitchingOutlet(null);
+    }
+  };
 
   // Load gifts lazily when change sheet is first opened
   const openChangeSheet = async () => {
@@ -207,6 +247,48 @@ export default function ConfirmationPage() {
         <p className="text-xs text-gray-400 mt-2">
           Keep your Reference ID safe. You may need it for any queries.
         </p>
+
+        {/* ── Other outlets section ── */}
+        {otherOutlets.length > 0 && (
+          <div className="w-full mt-6">
+            <p className="text-sm font-semibold text-gray-700 mb-3 text-left">
+              Your Other Outlets
+            </p>
+            <div className="space-y-2">
+              {otherOutlets.map((outlet) => (
+                <button
+                  key={outlet.id}
+                  onClick={() => handleSwitchOutlet(outlet)}
+                  disabled={!!switchingOutlet}
+                  className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5 text-left flex items-center justify-between active:scale-[0.98] transition-all hover:shadow-md disabled:opacity-60"
+                >
+                  <div>
+                    <p className="font-bold text-gray-900 text-sm">{outlet.retailerId}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Tier: <span className="font-semibold text-[#E3000F]">{outlet.slabName}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {outlet.hasSubmission ? (
+                      <span className="text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full">
+                        ✓ Done
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-amber-50 text-amber-700 font-medium px-2 py-0.5 rounded-full">
+                        Pending
+                      </span>
+                    )}
+                    {switchingOutlet === outlet.id ? (
+                      <div className="w-4 h-4 border-2 border-[#E3000F] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-gray-300 text-xl">›</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Change Gift Bottom Sheet ── */}

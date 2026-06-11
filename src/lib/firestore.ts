@@ -191,10 +191,22 @@ export async function getRetailerByMobile(mobile: string): Promise<Retailer | nu
   const snap = await db
     .collection('retailers')
     .where('mobile', '==', mobile)
+    .where('status', '==', 'active')
     .get();
   if (snap.empty) return null;
   const doc = snap.docs[0];
   return docToRetailer(doc.id, doc.data() as Record<string, unknown>);
+}
+
+/** Returns ALL active retailers registered to this mobile number (multi-outlet support). */
+export async function getRetailersByMobile(mobile: string): Promise<Retailer[]> {
+  const snap = await db
+    .collection('retailers')
+    .where('mobile', '==', mobile)
+    .where('status', '==', 'active')
+    .get();
+  if (snap.empty) return [];
+  return snap.docs.map((doc) => docToRetailer(doc.id, doc.data() as Record<string, unknown>));
 }
 
 export async function getRetailerById(id: string): Promise<Retailer | null> {

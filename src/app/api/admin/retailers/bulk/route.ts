@@ -176,49 +176,18 @@ export async function POST(request: NextRequest) {
     // Cache slabs once — avoids a DB query per row
     const allSlabs = await getAllSlabs();
 
-    // ── Pre-flight: catch duplicate mobile numbers within the file itself ──
-    const seenMobilesInFile = new Map<string, number>(); // mobile → first row number
-    const fileErrors: { row: number; error: string }[] = [];
+    const normalisedRows = rawRows.map((r) => normaliseRow(r));
 
-    const normalisedRows = rawRows.map((r, i) => {
-      const row = normaliseRow(r);
-      if (row.mobile) {
-        if (seenMobilesInFile.has(row.mobile)) {
-          fileErrors.push({
-            row: i + 2,
-            error: `Duplicate phone number ${row.mobile} — already used in row ${seenMobilesInFile.get(row.mobile)}`,
-          });
-        } else {
-          seenMobilesInFile.set(row.mobile, i + 2);
-        }
-      }
-      return row;
-    });
-
-    // If any in-file duplicates found, reject the whole upload immediately
-    if (fileErrors.length > 0) {
-      return NextResponse.json({
-        imported: 0,
-        failed: fileErrors.length,
-        errors: fileErrors,
-      });
-    }
-
-    // ── Pre-flight: fetch all existing retailer IDs and mobiles ──
+    // ── Pre-flight: fetch all existing retailer IDs ──
     const retailerIdsInFile = normalisedRows.map((r) => r.retailerId).filter(Boolean);
-    const mobilesInFile = normalisedRows.map((r) => r.mobile).filter(Boolean);
-
     const existingRetailerIds = new Set<string>();
-    const mobileToExistingRetailerId = new Map<string, string>();
 
-    if (retailerIdsInFile.length > 0 || mobilesInFile.length > 0) {
+    if (retailerIdsInFile.length > 0) {
       const retailersSnap = await db.collection('retailers').get();
       for (const doc of retailersSnap.docs) {
         const data = doc.data() as Record<string, unknown>;
         const rid = data.retailerId as string;
-        const mob = data.mobile as string;
         if (retailerIdsInFile.includes(rid)) existingRetailerIds.add(rid);
-        if (mobilesInFile.includes(mob)) mobileToExistingRetailerId.set(mob, rid);
       }
     }
 
@@ -273,18 +242,6 @@ export async function POST(request: NextRequest) {
       if (existingRetailerIds.has(row.retailerId)) {
         skipped++;
         rowResults.push({ row: rowNum, status: 'Skipped', remark: `Retailer ID "${row.retailerId}" already exists` });
-        continue;
-      }
-
-      // ── Mobile already registered → Failed ───────────────────────────────
-      const existingOwner = mobileToExistingRetailerId.get(row.mobile);
-      if (existingOwner) {
-        failed++;
-        rowResults.push({
-          row: rowNum,
-          status: 'Failed',
-          remark: `Phone number ${row.mobile} is already registered to Retailer ID "${existingOwner}"`,
-        });
         continue;
       }
 

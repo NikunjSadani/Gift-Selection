@@ -116,7 +116,11 @@ export default function LoginPage() {
         toast.error(data.error === 'invalid_otp' ? 'Invalid OTP. Please try again.' : 'Something went wrong.');
         return;
       }
-      if (data.hasSubmission) {
+      if (data.multipleOutlets) {
+        // Store outlet list for the picker page (sessionStorage is fine — same tab)
+        sessionStorage.setItem('kw_outlets', JSON.stringify(data.outlets));
+        router.replace('/select-outlet');
+      } else if (data.hasSubmission) {
         router.replace('/confirmation');
       } else {
         router.replace('/gift');
