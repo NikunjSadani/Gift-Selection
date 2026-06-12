@@ -115,7 +115,10 @@ export default function ConfirmationPage() {
         toast.error(data.message || 'Could not switch outlet. Please try again.');
         return;
       }
-      router.replace(data.hasSubmission ? '/confirmation' : '/gift');
+      // Use window.location instead of router.replace: if the user is already on
+      // /confirmation (switching between two submitted outlets), router.replace is a
+      // no-op and the component never re-fetches the new outlet's data.
+      window.location.replace(data.hasSubmission ? '/confirmation' : '/gift');
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
