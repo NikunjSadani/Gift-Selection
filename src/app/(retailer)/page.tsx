@@ -33,8 +33,8 @@ export default function LoginPage() {
       .catch(() => {})
       .finally(() => setChecking(false));
 
-    // Check campaign
-    fetch('/api/auth/request-otp', { method: 'POST', body: JSON.stringify({ mobile: '0000000000' }), headers: { 'Content-Type': 'application/json' } })
+    // Check campaign status via dedicated endpoint (no fake OTP request needed)
+    fetch('/api/auth/campaign-status')
       .then((r) => r.json())
       .then((d) => {
         if (d.status === 'before' || d.status === 'closed') setCampaignStatus(d.status);

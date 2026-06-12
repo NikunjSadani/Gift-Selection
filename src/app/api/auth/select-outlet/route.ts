@@ -47,12 +47,17 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('retailer_token', token, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 150 * 60 * 60,
       path: '/',
       sameSite: 'lax',
     });
     // Clear the short-lived selection token if it was used
-    response.cookies.set('outlet_selection_token', '', { maxAge: 0, path: '/' });
+    response.cookies.set('outlet_selection_token', '', {
+      maxAge: 0,
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+    });
 
     return response;
   } catch (err) {

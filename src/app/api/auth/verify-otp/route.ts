@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       const response = NextResponse.json({ success: true, hasSubmission: !!submission });
       response.cookies.set('retailer_token', token, {
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
         maxAge: 150 * 60 * 60,
         path: '/',
         sameSite: 'lax',
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('outlet_selection_token', outletSelectionToken, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 15 * 60, // 15 minutes — enough to pick an outlet
       path: '/',
       sameSite: 'lax',

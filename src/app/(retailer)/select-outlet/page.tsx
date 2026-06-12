@@ -29,16 +29,28 @@ export default function SelectOutletPage() {
     // Fallback: fetch from API using existing retailer_token
     // (handles browser back-button, refresh, or navigating here from within the app)
     fetch('/api/retailer/outlets', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) {
+          // 401 = session expired (outlet_selection_token timed out, no retailer_token yet)
+          toast.error('Session expired. Please log in again.');
+          router.replace('/');
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
-        if (!data || data.outlets.length < 2) {
-          // Single-outlet user or not logged in — redirect to home
+        if (!data) return; // already redirected above
+        if (data.outlets.length < 2) {
+          // Single-outlet user — home will redirect them to /gift or /confirmation
           router.replace('/');
           return;
         }
         setOutlets(data.outlets);
       })
-      .catch(() => router.replace('/'));
+      .catch(() => {
+        toast.error('Network error. Please try again.');
+        router.replace('/');
+      });
   }, [router]);
 
   const handleSelect = async (outlet: OutletOption) => {
