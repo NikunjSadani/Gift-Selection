@@ -184,15 +184,15 @@ export default function LoginPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
             />
             {/* T&C consent checkbox */}
-            <label className="flex items-start gap-2.5 mt-4 cursor-pointer select-none">
+            <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={agreedToTerms}
                 onChange={(e) => setAgreedToTerms(e.target.checked)}
-                className="mt-0.5 w-4 h-4 flex-none accent-[#E3000F] cursor-pointer"
+                className="w-4 h-4 flex-none accent-[#E3000F] cursor-pointer"
               />
-              <span className="text-xs text-gray-600 leading-relaxed">
-                I confirm that the information provided by me is accurate and complete. I have read and accepted the{' '}
+              <span className="text-sm text-gray-600">
+                I accept the{' '}
                 <a
                   href="/terms"
                   target="_blank"
@@ -202,7 +202,6 @@ export default function LoginPage() {
                 >
                   Terms &amp; Conditions
                 </a>
-                {' '}and consent to Kwality Wall&apos;s and its authorized service providers processing my information for loyalty program administration, communication, gift selection and reward fulfilment.
               </span>
             </label>
 
