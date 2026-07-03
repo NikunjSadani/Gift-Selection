@@ -7,12 +7,12 @@ export default function RetailerLayout({ children }: { children: React.ReactNode
       <header className="bg-[#E3000F] shadow-lg sticky top-0 z-50">
         <div className="max-w-md mx-auto px-4 py-2 flex items-center justify-between gap-3">
           {/* Logo on white pill */}
-          <div className="bg-white rounded-xl px-3 py-1.5 shadow-sm flex-shrink-0">
+          <div className="bg-white rounded-xl px-2 py-1 shadow-sm flex-shrink-0">
             <Image
               src={logo}
               alt="Kwality Wall's"
-              width={110}
-              height={44}
+              width={56}
+              height={56}
               priority
             />
           </div>
