@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [campaignStatus, setCampaignStatus] = useState<'active' | 'before' | 'closed' | null>(null);
   const [checking, setChecking] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -182,9 +183,32 @@ export default function LoginPage() {
               className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
               onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
             />
+            {/* T&C consent checkbox */}
+            <label className="flex items-start gap-2.5 mt-4 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 flex-none accent-[#E3000F] cursor-pointer"
+              />
+              <span className="text-xs text-gray-600 leading-relaxed">
+                I confirm that the information provided by me is accurate and complete. I have read and accepted the{' '}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#E3000F] underline font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Terms &amp; Conditions
+                </a>
+                {' '}and consent to Kwality Wall&apos;s and its authorized service providers processing my information for loyalty program administration, communication, gift selection and reward fulfilment.
+              </span>
+            </label>
+
             <button
               onClick={handleSendOtp}
-              disabled={loading || mobile.length !== 10}
+              disabled={loading || mobile.length !== 10 || !agreedToTerms}
               className="w-full mt-4 bg-[#E3000F] text-white font-bold py-4 rounded-xl text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform"
             >
               {loading ? 'Sending...' : 'Send OTP'}
