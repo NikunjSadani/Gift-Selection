@@ -554,7 +554,7 @@ export default function GiftPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Recipient&apos;s Name *</label>
               <input {...register('storeName', { required: "Recipient's name is required" })}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                 placeholder="Recipient's name" />
               {errors.storeName && <p className="text-red-500 text-xs mt-1">{errors.storeName.message}</p>}
             </div>
@@ -562,7 +562,7 @@ export default function GiftPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
               <input {...register('addressLine1', { required: 'Address is required' })}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                 placeholder="Shop/Building number, Street" />
               {errors.addressLine1 && <p className="text-red-500 text-xs mt-1">{errors.addressLine1.message}</p>}
             </div>
@@ -570,14 +570,14 @@ export default function GiftPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
               <input {...register('addressLine2')}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                 placeholder="Area, Colony (optional)" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Landmark</label>
               <input {...register('landmark')}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                 placeholder="Nearby landmark (optional)" />
             </div>
 
@@ -585,7 +585,7 @@ export default function GiftPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
                 <input {...register('city', { required: 'City is required' })}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                   placeholder="City" />
                 {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
               </div>
@@ -593,7 +593,7 @@ export default function GiftPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
                 <input {...register('pincode', { required: 'Required', pattern: { value: /^\d{6}$/, message: '6 digits' } })}
                   inputMode="numeric" maxLength={6}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] transition-colors"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] transition-colors"
                   placeholder="Pincode" />
                 {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode.message}</p>}
               </div>
@@ -602,7 +602,7 @@ export default function GiftPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
               <select {...register('state', { required: 'State is required' })}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-[#E3000F] bg-white transition-colors">
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-[#E3000F] bg-white transition-colors">
                 <option value="">Select State</option>
                 {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
