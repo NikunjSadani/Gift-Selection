@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import Image from 'next/image';
+import { CHANGE_WINDOW_MS } from '@/lib/gift-window';
 
 interface Gift {
   id: string;
@@ -47,7 +48,7 @@ const INDIAN_STATES = [
 ];
 
 function formatCountdown(isoStr: string): { label: string; urgent: boolean; expired: boolean } {
-  const ms = 86400000 - (Date.now() - new Date(isoStr).getTime());
+  const ms = CHANGE_WINDOW_MS - (Date.now() - new Date(isoStr).getTime());
   if (ms <= 0) return { label: 'Change window closed', urgent: false, expired: true };
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
@@ -103,7 +104,7 @@ export default function GiftPage() {
   // Within 24h: confirmed but can still change.
   // After 24h: fully locked.
   const is24hExpired = giftConfirmedAt
-    ? Date.now() - new Date(giftConfirmedAt).getTime() >= 86400000
+    ? Date.now() - new Date(giftConfirmedAt).getTime() >= CHANGE_WINDOW_MS
     : false;
   const isFullyLocked = giftConfirmed && is24hExpired;
   const canChangeAfterConfirm = giftConfirmed && !is24hExpired;
@@ -400,9 +401,9 @@ export default function GiftPage() {
           </h2>
           <p className="text-gray-500 text-sm mt-1">
             {isFullyLocked
-              ? 'The 24-hour change window has closed.'
+              ? 'The 48-hour change window has closed.'
               : canChangeAfterConfirm
-              ? 'You can still change your gift within the 24-hour window.'
+              ? 'You can still change your gift within the 48-hour window.'
               : 'Tap any gift to view details and select it.'}
           </p>
         </div>
@@ -489,7 +490,7 @@ export default function GiftPage() {
               <span className="text-2xl">🔒</span>
               <div>
                 <p className="text-gray-700 font-bold text-sm">{selectedGift.name}</p>
-                <p className="text-gray-500 text-xs mt-0.5">Locked — 24-hour window has closed</p>
+                <p className="text-gray-500 text-xs mt-0.5">Locked — 48-hour window has closed</p>
               </div>
             </div>
           ) : canChangeAfterConfirm && selectedGift ? (

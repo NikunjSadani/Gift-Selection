@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { CHANGE_WINDOW_MS } from '@/lib/gift-window';
 
 interface InProgressEntry {
   id: string;
@@ -33,7 +34,7 @@ function timeAgo(dateStr: string) {
 
 function windowRemaining(giftSelectedAt: string | null): { label: string; color: string } {
   if (!giftSelectedAt) return { label: '—', color: 'text-gray-400' };
-  const ms = 86400000 - (Date.now() - new Date(giftSelectedAt).getTime());
+  const ms = CHANGE_WINDOW_MS - (Date.now() - new Date(giftSelectedAt).getTime());
   if (ms <= 0) return { label: 'Expired', color: 'text-gray-400' };
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);

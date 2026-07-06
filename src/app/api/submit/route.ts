@@ -9,6 +9,7 @@ import {
   getNextSubmissionNumber,
 } from '@/lib/firestore';
 import { db } from '@/lib/firebase-admin';
+import { CHANGE_WINDOW_MS } from '@/lib/gift-window';
 
 // Change gift on an existing submission — allowed within 24h of giftConfirmedAt
 export async function PATCH(request: NextRequest) {
@@ -33,7 +34,7 @@ export async function PATCH(request: NextRequest) {
     // Fall back to submittedAt if giftConfirmedAt is not set (legacy submissions).
     const clockStart = submission.giftConfirmedAt ?? submission.submittedAt;
     const msSince = Date.now() - new Date(clockStart).getTime();
-    if (msSince > 86400000) {
+    if (msSince > CHANGE_WINDOW_MS) {
       return NextResponse.json({ error: 'window_expired' }, { status: 403 });
     }
 

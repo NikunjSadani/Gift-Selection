@@ -32,8 +32,10 @@ const GRADIENT_COLORS = [
   'from-indigo-400 to-blue-500',
 ];
 
+import { CHANGE_WINDOW_MS } from '@/lib/gift-window';
+
 function formatCountdown(submittedAt: string): { label: string; urgent: boolean; expired: boolean } {
-  const ms = 86400000 - (Date.now() - new Date(submittedAt).getTime());
+  const ms = CHANGE_WINDOW_MS - (Date.now() - new Date(submittedAt).getTime());
   if (ms <= 0) return { label: 'Window closed', urgent: false, expired: true };
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
@@ -154,7 +156,7 @@ export default function ConfirmationPage() {
       const data = await res.json();
       if (!res.ok) {
         if (data.error === 'window_expired') {
-          toast.error('The 24-hour change window has closed.');
+          toast.error('The 48-hour change window has closed.');
         } else {
           throw new Error(data.error);
         }
@@ -236,7 +238,7 @@ export default function ConfirmationPage() {
         ) : (
           <div className="w-full mb-4 bg-gray-50 rounded-xl px-4 py-3 text-sm text-gray-500 flex items-center gap-2">
             <span>🔒</span>
-            <span>Gift change window has closed (24h passed)</span>
+            <span>Gift change window has closed (48h passed)</span>
           </div>
         )}
 
