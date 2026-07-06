@@ -6,9 +6,13 @@
  * for consistency with the rest of the server test suite.
  */
 const { normaliseRow, planBulkImport } = await import('@/lib/bulk-retailers');
+import type { ExistingRetailer } from '@/lib/bulk-retailers';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
-const allSlabs = [{ id: 's1', name: '4K', internalCode: 'SLAB_4K' }];
+const allSlabs = [
+  { id: 's1', name: '4K', internalCode: 'SLAB_4K' },
+  { id: 's2', name: '8K', internalCode: 'SLAB_8K' },
+];
 
 /** A fully-valid normalised row for a fresh retailer. */
 function validRow(overrides: Record<string, string> = {}): Record<string, string> {
@@ -22,7 +26,33 @@ function validRow(overrides: Record<string, string> = {}): Record<string, string
   };
 }
 
-const noExisting = new Set<string>();
+/** Builds an ExistingRetailer fixture — defaults mirror validRow() (resolved to slab s1). */
+function existingRetailer(overrides: Partial<ExistingRetailer> = {}): ExistingRetailer {
+  return {
+    docId: 'doc1',
+    retailerId: 'R100',
+    name: 'Test Store',
+    ownerName: null,
+    mobile: '9876543210',
+    slabId: 's1',
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    state: null,
+    pincode: '560001',
+    landmark: null,
+    cso: null,
+    csoPhone: null,
+    ...overrides,
+  };
+}
+
+/** Builds a Map<retailerId, ExistingRetailer> from a list of existing retailers. */
+function existingMap(...list: ExistingRetailer[]): Map<string, ExistingRetailer> {
+  return new Map(list.map((r) => [r.retailerId, r]));
+}
+
+const noExisting = new Map<string, ExistingRetailer>();
 
 // ── normaliseRow ──────────────────────────────────────────────────────────────
 describe('normaliseRow', () => {
@@ -47,11 +77,12 @@ describe('normaliseRow', () => {
 // ── planBulkImport ────────────────────────────────────────────────────────────
 describe('planBulkImport', () => {
   it('a valid row is Imported and produces one create', () => {
-    const { rowResults, creates } = planBulkImport([validRow()], noExisting, allSlabs);
+    const { rowResults, creates, updates } = planBulkImport([validRow()], noExisting, allSlabs);
     expect(rowResults).toHaveLength(1);
     expect(rowResults[0].status).toBe('Imported');
     expect(rowResults[0].row).toBe(2); // first data row = header + 1
     expect(creates).toHaveLength(1);
+    expect(updates).toHaveLength(0);
     expect(creates[0].data.retailerId).toBe('R100');
     expect(creates[0].data.slabId).toBe('s1'); // resolved slab id
     expect(creates[0].data.slabName).toBe('4K');
@@ -91,15 +122,16 @@ describe('planBulkImport', () => {
     expect(rowResults[0].remark).toBe('Invalid pin code "123" — must be exactly 6 digits');
   });
 
-  it('id already in existingRetailerIds → Skipped "already exists"', () => {
-    const { rowResults, creates } = planBulkImport(
+  it('id already in DB with IDENTICAL values → Skipped "No changes"', () => {
+    const { rowResults, creates, updates } = planBulkImport(
       [validRow({ retailerId: 'DUP' })],
-      new Set(['DUP']),
+      existingMap(existingRetailer({ docId: 'dDup', retailerId: 'DUP' })),
       allSlabs,
     );
     expect(rowResults[0].status).toBe('Skipped');
-    expect(rowResults[0].remark).toBe('Retailer ID "DUP" already exists');
+    expect(rowResults[0].remark).toBe('No changes');
     expect(creates).toHaveLength(0);
+    expect(updates).toHaveLength(0);
   });
 
   it('two rows with the same NEW id → first Imported, second Skipped (in-file dupe), one create only', () => {
@@ -135,5 +167,92 @@ describe('planBulkImport', () => {
     expect(rowResults[0].status).toBe('Imported');
     expect(creates[0].data.slabId).toBe('s1');
     expect(creates[0].data.slabName).toBe('4K');
+  });
+
+  // ── Upsert behaviour ───────────────────────────────────────────────────────
+  it('(a) existing id, city differs → Updated with a diff note', () => {
+    const { rowResults, creates, updates } = planBulkImport(
+      [validRow({ city: 'Mumbai' })],
+      existingMap(existingRetailer({ city: null })),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Updated');
+    expect(creates).toHaveLength(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].docId).toBe('doc1');
+    expect(updates[0].changedFields).toContain('city');
+    expect(updates[0].data.city).toBe('Mumbai');
+    expect(rowResults[0].remark).toContain('city (');
+    expect(rowResults[0].remark).toContain('→');
+  });
+
+  it('(b) existing id, mobile differs → Updated, phone diff note shows old→new', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow({ mobile: '8887776666' })],
+      existingMap(existingRetailer({ mobile: '9990001111' })),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Updated');
+    expect(updates[0].changedFields).toContain('phone');
+    expect(updates[0].data.mobile).toBe('8887776666');
+    expect(rowResults[0].remark).toContain('phone (9990001111→8887776666)');
+  });
+
+  it('(c) existing id, file blanks an optional field → Updated, field set to null', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow({ landmark: '' })],
+      existingMap(existingRetailer({ landmark: 'Old Landmark' })),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Updated');
+    expect(updates[0].changedFields).toContain('landmark');
+    expect(updates[0].data.landmark).toBeNull();
+    expect(rowResults[0].remark).toContain('landmark (Old Landmark→(blank))');
+  });
+
+  it('(d) existing id, ALL values identical → Skipped "No changes", no update', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow()],
+      existingMap(existingRetailer()),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Skipped');
+    expect(rowResults[0].remark).toBe('No changes');
+    expect(updates).toHaveLength(0);
+  });
+
+  it('(e) existing id but invalid mobile in file → Failed, no update', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow({ mobile: '12345' })],
+      existingMap(existingRetailer()),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Failed');
+    expect(rowResults[0].remark).toBe('Invalid phone number "12345" — must be exactly 10 digits');
+    expect(updates).toHaveLength(0);
+  });
+
+  it('(f) existing id appears twice (both changing) → first Updated, second Skipped in-file dup, one update', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow({ city: 'Mumbai' }), validRow({ city: 'Delhi' })],
+      existingMap(existingRetailer({ city: null })),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Updated');
+    expect(rowResults[1].status).toBe('Skipped');
+    expect(rowResults[1].remark).toBe('Duplicate Retailer ID "R100" within file');
+    expect(updates).toHaveLength(1);
+  });
+
+  it('(g) slab change: existing s1, file resolves to s2 → Updated, data.slabId==="s2"', () => {
+    const { rowResults, updates } = planBulkImport(
+      [validRow({ slabId: '8K' })],
+      existingMap(existingRetailer({ slabId: 's1' })),
+      allSlabs,
+    );
+    expect(rowResults[0].status).toBe('Updated');
+    expect(updates[0].changedFields).toContain('slab');
+    expect(updates[0].data.slabId).toBe('s2');
+    expect(updates[0].data.slabName).toBe('8K');
   });
 });

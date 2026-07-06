@@ -5,6 +5,8 @@
  * without any Firebase dependency.
  */
 
+export {}; // make this file a module so top-level await is allowed under tsc
+
 const { CHANGE_WINDOW_MS, isChangeWindowExpired } = await import('@/lib/gift-window');
 
 const HOUR = 3600000;

@@ -162,7 +162,7 @@ export function findUnrecognisedColumns(rawRows: Record<string, unknown>[]): str
 
 // ── Planning ─────────────────────────────────────────────────────────────────
 
-export type RowStatus = 'Imported' | 'Skipped' | 'Failed';
+export type RowStatus = 'Imported' | 'Updated' | 'Skipped' | 'Failed';
 
 export interface RowResult {
   row: number;
@@ -175,9 +175,35 @@ export interface PlannedCreate {
   data: Record<string, unknown>;
 }
 
+/** The current DB state of a retailer whose ID appears in the upload file. */
+export interface ExistingRetailer {
+  docId: string;
+  retailerId: string;
+  name: string;
+  ownerName: string | null;
+  mobile: string;
+  slabId: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  landmark: string | null;
+  cso: string | null;
+  csoPhone: string | null;
+}
+
+export interface PlannedUpdate {
+  docId: string;
+  rowNum: number;
+  data: Record<string, unknown>;
+  changedFields: string[];
+}
+
 export interface BulkPlan {
   rowResults: RowResult[];
   creates: PlannedCreate[];
+  updates: PlannedUpdate[];
 }
 
 export interface SlabRef {
@@ -195,15 +221,17 @@ export interface SlabRef {
  *
  * Validation order matches the original serial loop exactly:
  *   retailerId → name → mobile → 10-digit mobile → pincode → 6-digit pincode →
- *   slabId → existing/duplicate skip → slab lookup → create.
+ *   slabId → in-file-duplicate skip → slab lookup → insert (new id) or
+ *   update/no-change-skip (existing id).
  */
 export function planBulkImport(
   normalisedRows: Record<string, string>[],
-  existingRetailerIds: Set<string>,
+  existingByRetailerId: Map<string, ExistingRetailer>,
   allSlabs: SlabRef[],
 ): BulkPlan {
   const rowResults: RowResult[] = [];
   const creates: PlannedCreate[] = [];
+  const updates: PlannedUpdate[] = [];
 
   // Guards against writing the same retailerId twice within one request.
   const seenInThisRequest = new Set<string>();
@@ -242,12 +270,6 @@ export function planBulkImport(
       continue;
     }
 
-    // ── Already exists in DB → Skipped ──────────────────────────────────
-    if (existingRetailerIds.has(row.retailerId)) {
-      rowResults.push({ row: rowNum, status: 'Skipped', remark: `Retailer ID "${row.retailerId}" already exists` });
-      continue;
-    }
-
     // ── Duplicate within this same file → Skipped (bug fix) ─────────────
     if (seenInThisRequest.has(row.retailerId)) {
       rowResults.push({ row: rowNum, status: 'Skipped', remark: `Duplicate Retailer ID "${row.retailerId}" within file` });
@@ -271,30 +293,91 @@ export function planBulkImport(
       continue;
     }
 
-    // ── Plan the create ──────────────────────────────────────────────────
+    const existing = existingByRetailerId.get(row.retailerId);
+
+    // ── New retailer ID → INSERT ─────────────────────────────────────────
+    if (existing === undefined) {
+      seenInThisRequest.add(row.retailerId);
+      creates.push({
+        rowNum,
+        data: {
+          retailerId:   row.retailerId,
+          name:         row.name,
+          ownerName:    row.ownerName    || null,
+          mobile:       row.mobile,
+          slabId:       slab.id,
+          slabName:     slab.name,
+          addressLine1: row.addressLine1 || null,
+          addressLine2: row.addressLine2 || null,
+          city:         row.city         || null,
+          state:        row.state        || null,
+          pincode:      row.pincode      || null,
+          landmark:     row.landmark     || null,
+          cso:          row.cso          || null,
+          csoPhone:     row.csoPhone     || null,
+          status:       'active',
+        },
+      });
+      rowResults.push({ row: rowNum, status: 'Imported', remark: '' });
+      continue;
+    }
+
+    // ── Existing retailer ID → UPDATE (or no-change Skip) ────────────────
+    // The file is the source of truth: overwrite ALL fields; a blank cell
+    // clears an optional field (→ null). No `status`/createdAt in an update.
+    const data: Record<string, unknown> = {
+      name:         row.name,
+      ownerName:    row.ownerName    || null,
+      mobile:       row.mobile,
+      slabId:       slab.id,
+      slabName:     slab.name,
+      addressLine1: row.addressLine1 || null,
+      addressLine2: row.addressLine2 || null,
+      city:         row.city         || null,
+      state:        row.state        || null,
+      pincode:      row.pincode      || null,
+      landmark:     row.landmark     || null,
+      cso:          row.cso          || null,
+      csoPhone:     row.csoPhone     || null,
+    };
+
+    // Diff new-vs-existing, field by field, with human labels.
+    const norm = (x: unknown) => String(x ?? '').trim();
+    const render = (x: unknown) => (norm(x) === '' ? '(blank)' : norm(x));
+    const diffChecks: { label: string; next: unknown; prev: unknown }[] = [
+      { label: 'name',      next: data.name,         prev: existing.name },
+      { label: 'owner',     next: data.ownerName,    prev: existing.ownerName },
+      { label: 'phone',     next: data.mobile,       prev: existing.mobile },
+      { label: 'slab',      next: slab.id,           prev: existing.slabId },
+      { label: 'address1',  next: data.addressLine1, prev: existing.addressLine1 },
+      { label: 'address2',  next: data.addressLine2, prev: existing.addressLine2 },
+      { label: 'city',      next: data.city,         prev: existing.city },
+      { label: 'state',     next: data.state,        prev: existing.state },
+      { label: 'pincode',   next: data.pincode,      prev: existing.pincode },
+      { label: 'landmark',  next: data.landmark,     prev: existing.landmark },
+      { label: 'CSO',       next: data.cso,          prev: existing.cso },
+      { label: 'CSO phone', next: data.csoPhone,     prev: existing.csoPhone },
+    ];
+
+    const changedFields: string[] = [];
+    const notes: string[] = [];
+    for (const { label, next, prev } of diffChecks) {
+      if (norm(next) !== norm(prev)) {
+        changedFields.push(label);
+        notes.push(`${label} (${render(prev)}→${render(next)})`);
+      }
+    }
+
     seenInThisRequest.add(row.retailerId);
-    creates.push({
-      rowNum,
-      data: {
-        retailerId:   row.retailerId,
-        name:         row.name,
-        ownerName:    row.ownerName    || null,
-        mobile:       row.mobile,
-        slabId:       slab.id,
-        slabName:     slab.name,
-        addressLine1: row.addressLine1 || null,
-        addressLine2: row.addressLine2 || null,
-        city:         row.city         || null,
-        state:        row.state        || null,
-        pincode:      row.pincode      || null,
-        landmark:     row.landmark     || null,
-        cso:          row.cso          || null,
-        csoPhone:     row.csoPhone     || null,
-        status:       'active',
-      },
-    });
-    rowResults.push({ row: rowNum, status: 'Imported', remark: '' });
+
+    if (changedFields.length === 0) {
+      rowResults.push({ row: rowNum, status: 'Skipped', remark: 'No changes' });
+      continue;
+    }
+
+    updates.push({ docId: existing.docId, rowNum, data, changedFields });
+    rowResults.push({ row: rowNum, status: 'Updated', remark: `Updated: ${notes.join(', ')}` });
   }
 
-  return { rowResults, creates };
+  return { rowResults, creates, updates };
 }

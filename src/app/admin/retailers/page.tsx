@@ -59,6 +59,7 @@ export default function RetailersPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [uploadSummary, setUploadSummary] = useState<{
     imported: number;
+    updated: number;
     skipped: number;
     failed: number;
     reportRows: Record<string, unknown>[];
@@ -280,7 +281,7 @@ export default function RetailersPage() {
       }
 
       // Build per-row report using the rowResults array returned by the API
-      type RowResult = { row: number; status: 'Imported' | 'Skipped' | 'Failed'; remark: string };
+      type RowResult = { row: number; status: 'Imported' | 'Updated' | 'Skipped' | 'Failed'; remark: string };
       const resultByIndex = new Map<number, RowResult>();
       (result.rowResults as RowResult[] || []).forEach((r) => {
         resultByIndex.set(r.row - 2, r); // row is 1-based with header → convert to 0-based index
@@ -297,6 +298,7 @@ export default function RetailersPage() {
 
       setUploadSummary({
         imported: result.imported,
+        updated: result.updated ?? 0,
         skipped: result.skipped ?? 0,
         failed: result.failed,
         reportRows,
@@ -304,9 +306,10 @@ export default function RetailersPage() {
         detectedColumns: result.detectedColumns ?? [],
       });
 
-      // Auto-download the report when anything failed or was skipped so the
-      // admin can immediately reconcile without hunting for the manual button.
-      if ((result.failed ?? 0) > 0 || (result.skipped ?? 0) > 0) {
+      // Auto-download the report when anything failed, was skipped, or was
+      // updated so the admin can immediately reconcile without hunting for the
+      // manual button.
+      if ((result.failed ?? 0) > 0 || (result.skipped ?? 0) > 0 || (result.updated ?? 0) > 0) {
         downloadReportFrom(reportRows);
         toast.success('Report downloaded — check your Downloads folder');
       }
@@ -436,7 +439,8 @@ export default function RetailersPage() {
               <div>
                 <div className="flex gap-4 text-sm font-semibold">
                   <span className="text-green-700">✓ {uploadSummary.imported} imported</span>
-                  {uploadSummary.skipped > 0 && <span className="text-blue-600">⊘ {uploadSummary.skipped} skipped (already exist)</span>}
+                  {uploadSummary.updated > 0 && <span className="text-indigo-600">✎ {uploadSummary.updated} updated</span>}
+                  {uploadSummary.skipped > 0 && <span className="text-blue-600">⊘ {uploadSummary.skipped} skipped</span>}
                   {uploadSummary.failed  > 0 && <span className="text-red-600">✕ {uploadSummary.failed} failed</span>}
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">Download the report for row-by-row details and remarks.</p>
