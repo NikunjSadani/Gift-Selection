@@ -303,6 +303,14 @@ export default function RetailersPage() {
         unrecognisedColumns: result.unrecognisedColumns ?? [],
         detectedColumns: result.detectedColumns ?? [],
       });
+
+      // Auto-download the report when anything failed or was skipped so the
+      // admin can immediately reconcile without hunting for the manual button.
+      if ((result.failed ?? 0) > 0 || (result.skipped ?? 0) > 0) {
+        downloadReportFrom(reportRows);
+        toast.success('Report downloaded — check your Downloads folder');
+      }
+
       fetchRetailers();
     } catch (err) {
       toast.dismiss(toastId);
@@ -311,9 +319,8 @@ export default function RetailersPage() {
     }
   };
 
-  const downloadReport = () => {
-    if (!uploadSummary) return;
-    const ws = XLSX.utils.json_to_sheet(uploadSummary.reportRows);
+  const downloadReportFrom = (reportRows: Record<string, unknown>[]) => {
+    const ws = XLSX.utils.json_to_sheet(reportRows);
     // Color-hint: mark Upload Status column header
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Upload Report');
@@ -327,6 +334,39 @@ export default function RetailersPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadReport = () => {
+    if (!uploadSummary) return;
+    downloadReportFrom(uploadSummary.reportRows);
+  };
+
+  const exportAllRetailers = async () => {
+    toast.loading('Preparing export…', { id: 'export' });
+    try {
+      const res = await fetch('/api/admin/retailers/export', { credentials: 'include' });
+      if (!res.ok) {
+        toast.error('Failed to export retailers', { id: 'export' });
+        return;
+      }
+      const data = await res.json();
+      const ws = XLSX.utils.json_to_sheet(data.retailers);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Retailers');
+      const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbOut], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `all-retailers-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${data.total} retailers`, { id: 'export' });
+    } catch {
+      toast.error('Failed to export retailers', { id: 'export' });
+    }
   };
 
   const downloadTemplate = () => {
@@ -371,6 +411,9 @@ export default function RetailersPage() {
         <div className="flex gap-2">
           <button onClick={downloadTemplate} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
             Download Template
+          </button>
+          <button onClick={exportAllRetailers} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+            Export All
           </button>
           <button onClick={() => fileRef.current?.click()} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
             Bulk Upload
