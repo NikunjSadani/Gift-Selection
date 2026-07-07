@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { buildSubmissionsWorksheet } from '@/lib/submissions-export';
 
 interface Submission {
   id: string;
@@ -209,27 +210,10 @@ export default function SubmissionsPage() {
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-
-      // Replace Document Link cells with =HYPERLINK() formula cells.
-      // SheetJS CE does not support the .l hyperlink property (Pro only),
-      // but it does write formula cells — Excel renders =HYPERLINK() as a
-      // clickable blue link without any copy-paste quoting issues.
-      const sheetRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      let docLinkCol = -1;
-      for (let col = sheetRange.s.c; col <= sheetRange.e.c; col++) {
-        const headerCell = ws[XLSX.utils.encode_cell({ r: 0, c: col })];
-        if (headerCell?.v === 'Document Link') { docLinkCol = col; break; }
-      }
-      if (docLinkCol >= 0) {
-        docUrls.forEach((url, i) => {
-          if (!url) return;
-          const cellAddr = XLSX.utils.encode_cell({ r: i + 1, c: docLinkCol });
-          // Escape any double-quotes in the URL (shouldn't happen but be safe)
-          const safeUrl = url.replace(/"/g, '%22');
-          ws[cellAddr] = { t: 'f', f: `HYPERLINK("${safeUrl}","Open Document")` };
-        });
-      }
+      // Build the sheet with REAL clickable hyperlinks on the Document Link
+      // column (cell `.l` property — reliable across Excel/LibreOffice/Sheets;
+      // the old =HYPERLINK() formula rendered as plain text in many viewers).
+      const ws = buildSubmissionsWorksheet(rows, docUrls);
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
