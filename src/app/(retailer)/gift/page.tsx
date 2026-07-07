@@ -622,7 +622,7 @@ export default function GiftPage() {
             <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
               <div className="flex flex-wrap gap-2">
-                {['GST Certificate', 'Trade License', 'Store Photo', 'Address Proof'].map((type) => (
+                {['GST Certificate', 'Trade License', 'Store Board with Address', 'Address Proof'].map((type) => (
                   <button key={type} type="button" onClick={() => setDocumentType(type)}
                     className={`px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
                       documentType === type ? 'bg-[#E3000F] border-[#E3000F] text-white' : 'border-gray-200 text-gray-600 bg-white'}`}>
