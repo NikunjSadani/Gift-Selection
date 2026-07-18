@@ -138,10 +138,29 @@ export const COL: Record<string, string> = {
   'segment': 'slabId',
 };
 
+// Compact a header to its bare alphanumerics so spacing/punctuation don't
+// matter: "Slab Winner", "SlabWinner", "slab_winner" all become "slabwinner".
+const compact = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Space/punctuation-insensitive view of COL. Built from the same source so the
+// two can never drift. (Same-value collisions are harmless; there are none with
+// conflicting values.)
+const COL_COMPACT: Record<string, string> = {};
+for (const [k, v] of Object.entries(COL)) COL_COMPACT[compact(k)] = v;
+
+/**
+ * Map a raw file header to an internal key. Tries the exact lowercased header
+ * first, then falls back to a compacted (spaces/punctuation removed) match so
+ * e.g. "SlabWinner" resolves the same as "Slab Winner".
+ */
+export function mapHeader(key: string): string | undefined {
+  return COL[key.trim().toLowerCase()] ?? COL_COMPACT[compact(key)];
+}
+
 export function normaliseRow(raw: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
-    const mapped = COL[key.trim().toLowerCase()];
+    const mapped = mapHeader(key);
     // Stringify everything — XLSX may parse phone/pincode as JS numbers
     if (mapped) out[mapped] = String(value ?? '').trim();
   }
@@ -157,7 +176,7 @@ export function findUnrecognisedColumns(rawRows: Record<string, unknown>[]): str
       seen.add(key.trim());
     }
   }
-  return Array.from(seen).filter((k) => !COL[k.toLowerCase()]);
+  return Array.from(seen).filter((k) => !mapHeader(k));
 }
 
 // ── Planning ─────────────────────────────────────────────────────────────────

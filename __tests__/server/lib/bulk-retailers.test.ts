@@ -5,7 +5,7 @@
  * no jest.unstable_mockModule needed. We still use the ESM dynamic-import style
  * for consistency with the rest of the server test suite.
  */
-const { normaliseRow, planBulkImport } = await import('@/lib/bulk-retailers');
+const { normaliseRow, planBulkImport, mapHeader } = await import('@/lib/bulk-retailers');
 import type { ExistingRetailer } from '@/lib/bulk-retailers';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -71,6 +71,43 @@ describe('normaliseRow', () => {
     const out = normaliseRow({ 'Totally Unknown Column': 'x', Name: 'Shop' });
     expect(out.name).toBe('Shop');
     expect(Object.keys(out)).not.toContain('Totally Unknown Column');
+  });
+
+  it('maps space/punctuation-free headers (e.g. exported "SlabWinner", "CSOPhoneNumber")', () => {
+    const out = normaliseRow({
+      RetailerID: 'HUL-1',
+      RetailerName: 'Esswell Chemist',
+      PhoneNumber: 9769920115,
+      PinCode: 400014,
+      SlabWinner: '1.25L',
+      CSOPhoneNumber: 9222976133,
+    });
+    expect(out.retailerId).toBe('HUL-1');
+    expect(out.name).toBe('Esswell Chemist');
+    expect(out.mobile).toBe('9769920115');
+    expect(out.pincode).toBe('400014');
+    expect(out.slabId).toBe('1.25L');   // the header that was breaking the whole upload
+    expect(out.csoPhone).toBe('9222976133');
+  });
+});
+
+// ── mapHeader ─────────────────────────────────────────────────────────────────
+describe('mapHeader', () => {
+  it.each([
+    ['Slab Winner', 'slabId'],
+    ['SlabWinner', 'slabId'],
+    ['slab_winner', 'slabId'],
+    ['SLABWINNER', 'slabId'],
+    ['Phone Number', 'mobile'],
+    ['PhoneNumber', 'mobile'],
+    ['CSOPhoneNumber', 'csoPhone'],
+    ['RetailerID', 'retailerId'],
+  ])('%s -> %s', (header, expected) => {
+    expect(mapHeader(header)).toBe(expected);
+  });
+
+  it('returns undefined for a genuinely unknown header', () => {
+    expect(mapHeader('Favourite Colour')).toBeUndefined();
   });
 });
 

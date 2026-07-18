@@ -3,7 +3,7 @@ import { db } from '@/lib/firebase-admin';
 import { verifyAdminToken } from '@/lib/auth';
 import { getAllSlabs } from '@/lib/firestore';
 import {
-  COL,
+  mapHeader,
   normaliseRow,
   findUnrecognisedColumns,
   planBulkImport,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     // Report which internal keys were successfully mapped from the file
     const detectedColumns = rawRows.length > 0
-      ? Array.from(new Set(Object.keys(rawRows[0]).map((k) => COL[k.trim().toLowerCase()]).filter(Boolean)))
+      ? Array.from(new Set(Object.keys(rawRows[0]).map((k) => mapHeader(k)).filter(Boolean)))
       : [];
 
     // Cache slabs once — avoids a DB query per row
