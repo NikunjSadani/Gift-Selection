@@ -3,8 +3,20 @@ dotenv.config({ path: '.env.local' });
 import { cert, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY!;
-const app = initializeApp({ credential: cert(JSON.parse(key.replace(/^﻿/, ''))) });
+// Safety: refuse to run unless the key targets the expected project.
+const EXPECTED_PROJECT = 'kwality-gift---production';
+
+const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+if (!key) {
+  console.error('❌  FIREBASE_SERVICE_ACCOUNT_KEY not set in .env.local');
+  process.exit(1);
+}
+const parsed = JSON.parse(key.replace(/^﻿/, ''));
+if (parsed.project_id !== EXPECTED_PROJECT) {
+  console.error(`❌  Refusing to run: expected ${EXPECTED_PROJECT}, got ${parsed.project_id}`);
+  process.exit(1);
+}
+const app = initializeApp({ credential: cert(parsed) });
 const db = getFirestore(app);
 
 async function main() {
