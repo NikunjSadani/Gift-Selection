@@ -30,12 +30,15 @@ export function buildSubmissionsWorksheet(
   if (docLinkCol < 0) return ws;
 
   docUrls.forEach((url, i) => {
-    if (!url) return;
+    // Strip any embedded whitespace/newlines — some stored URLs picked up a
+    // stray newline from a mis-set storage-bucket secret, which breaks the link.
+    const clean = (url || '').replace(/\s+/g, '');
+    if (!clean) return;
     const addr = XLSX.utils.encode_cell({ r: i + 1, c: docLinkCol }); // +1 skips the header row
     ws[addr] = {
       t: 's',
       v: 'Open Document',
-      l: { Target: url, Tooltip: 'Open Document' },
+      l: { Target: clean, Tooltip: 'Open Document' },
     };
   });
 

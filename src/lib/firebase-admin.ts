@@ -13,7 +13,10 @@ function initAdmin(): App {
 
   return initializeApp({
     credential: cert(serviceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    // .trim() guards against a trailing newline/CR in the secret (Windows-created
+    // secrets often carry \r\n), which would otherwise be concatenated into every
+    // uploaded document's public URL and break the link.
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET?.trim(),
   });
 }
 

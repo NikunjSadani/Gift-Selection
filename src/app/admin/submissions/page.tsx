@@ -402,7 +402,7 @@ export default function SubmissionsPage() {
               {selectedSub.documentUrl && (
                 <div className="flex gap-3">
                   <span className="text-gray-400 w-36 flex-none">Document</span>
-                  <a href={selectedSub.documentUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={selectedSub.documentUrl.replace(/\s+/g, '')} target="_blank" rel="noopener noreferrer"
                     className="text-blue-600 underline text-sm">{selectedSub.documentType || 'View'}</a>
                 </div>
               )}

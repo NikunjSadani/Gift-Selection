@@ -38,4 +38,11 @@ describe('buildSubmissionsWorksheet', () => {
     const ws = buildSubmissionsWorksheet([{ 'Reference ID': 'KW-1' }], ['https://x/a.jpg']);
     expect((ws['A1'] as XLSX.CellObject).v).toBe('Reference ID');
   });
+
+  it('strips embedded whitespace/newlines from the URL so the link works', () => {
+    const dirty = 'https://storage.googleapis.com/bucket.app\n/uploads/abc.jpg';
+    const ws = buildSubmissionsWorksheet(rows, [dirty, '']);
+    const cell = ws['B2'] as XLSX.CellObject;
+    expect(cell.l!.Target).toBe('https://storage.googleapis.com/bucket.app/uploads/abc.jpg');
+  });
 });
